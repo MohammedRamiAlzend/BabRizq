@@ -18,7 +18,7 @@
 import { Link } from 'react-router-dom';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { MOCK_DRIVERS } from '~/entities/fulfillmentData';
+import { MOCK_DRIVERS } from '~/entities/driver';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import { ClipboardList, Truck, CheckCircle2, AlertCircle, Users, ChevronRight } from 'lucide-react';
 import { todayDate } from '@/shared/lib/utils';

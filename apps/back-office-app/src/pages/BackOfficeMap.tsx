@@ -20,8 +20,8 @@
 import { useState } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { MOCK_DRIVERS } from '~/entities/fulfillmentData';
-import { DRIVER_LOCATIONS, DriverLocation } from '~/entities/backOfficeData';
+import { MOCK_DRIVERS } from '~/entities/driver';
+import { DRIVER_LOCATIONS, DriverLocation } from '~/entities/map';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import { MapPin, X } from 'lucide-react';
 

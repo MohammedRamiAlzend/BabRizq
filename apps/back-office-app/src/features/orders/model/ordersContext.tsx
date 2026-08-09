@@ -1,5 +1,19 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { ALL_ORDERS, FullOrder, FullOrderStatus, MOCK_DRIVERS } from '~/entities/fulfillmentData';
+/**
+ * Orders feature — React context.
+ *
+ * Thin stateful wrapper over the pure functions in `./orderModel.ts`. Keeps the
+ * fulfillment order book in component state and exposes the same public API the
+ * pages already consume (`useOrders()`). All business rules live in
+ * `orderModel.ts` so they are unit-testable without React.
+ */
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { ALL_ORDERS, FullOrder, FullOrderStatus } from '~/entities/order';
+import { MOCK_DRIVERS } from '~/entities/driver';
+import {
+  assignDriver as assignDriverModel,
+  updateStatus as updateStatusModel,
+  setProofOfDelivery as setProofOfDeliveryModel,
+} from './orderModel';
 
 interface OrdersContextType {
   orders: FullOrder[];
@@ -16,20 +30,20 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
   const assignDriver = useCallback((orderId: string, driverId: string) => {
     const driver = MOCK_DRIVERS.find(d => d.id === driverId);
     if (!driver) return;
-    setOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, assignedDriverId: driverId, assignedDriverEn: driver.nameEn, assignedDriverAr: driver.nameAr, status: 'assigned' as FullOrderStatus }
-        : o
-    ));
+    setOrders(prev => assignDriverModel(prev, orderId, driver));
   }, []);
 
-  const updateStatus = useCallback((orderId: string, status: FullOrderStatus) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-  }, []);
+  const updateStatus = useCallback(
+    (orderId: string, status: FullOrderStatus) =>
+      setOrders(prev => updateStatusModel(prev, orderId, status)),
+    []
+  );
 
-  const setProofOfDelivery = useCallback((orderId: string, proof: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, proofOfDelivery: proof } : o));
-  }, []);
+  const setProofOfDelivery = useCallback(
+    (orderId: string, proof: string) =>
+      setOrders(prev => setProofOfDeliveryModel(prev, orderId, proof)),
+    []
+  );
 
   return (
     <OrdersContext.Provider value={{ orders, assignDriver, updateStatus, setProofOfDelivery }}>
@@ -43,12 +57,3 @@ export const useOrders = () => {
   if (!ctx) throw new Error('useOrders must be used within OrdersProvider');
   return ctx;
 };
-
-
-
-
-
-
-
-
-

@@ -26,7 +26,7 @@ import {
   BackOfficeChatConversation,
   BackOfficeChatMessage,
   BackOfficeConversationType,
-} from '~/entities/backOfficeData';
+} from '~/entities/chat';
 import { Send, User, Store, MessageSquare } from 'lucide-react';
 
 /* ---------- Helpers ---------- */
