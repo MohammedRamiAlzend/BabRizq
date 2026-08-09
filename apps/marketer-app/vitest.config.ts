@@ -1,14 +1,19 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, mergeConfig } from 'vitest/config';
+import viteConfig from './vite.config';
 
 /**
  * Vitest configuration for the marketer app.
  *
- * Vitest automatically loads `./vite.config.ts` (path aliases, React plugin),
- * so this file only tunes the test runner itself.
+ * When a `vitest.config.ts` exists Vitest does NOT load `vite.config.ts`, so
+ * the app's path aliases (`@/shared/lib/api`, etc.) and React plugin are
+ * merged in explicitly. The `test` block only tunes the test runner itself.
  */
-export default defineConfig({
-  test: {
-    environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
-  },
-});
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      environment: 'node',
+      include: ['src/**/*.test.{ts,tsx}'],
+    },
+  })
+);

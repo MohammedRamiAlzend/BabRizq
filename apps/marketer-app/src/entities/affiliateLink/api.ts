@@ -7,6 +7,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { AffiliateLink, AffiliateTarget } from './model';
+import { api, ApiError, unwrapList } from '@/shared/lib/api';
 
 /** In-memory affiliate targets. TODO(migration): replaced by `GET /api/marketer/targets`. */
 export const AFFILIATE_TARGETS: AffiliateTarget[] = [
@@ -30,32 +31,71 @@ export const INITIAL_LINKS: AffiliateLink[] = [
   { id: 'al5', url: 'babrizq.com/product/p1?ref=marketer1', targetNameEn: 'Premium Wireless Headphones', targetNameAr: 'سماعات لاسلكية فاخرة', type: 'product', clicks: 678, conversions: 45, earned: 675, createdAt: '2026-04-03' },
 ];
 
-/** Simulates `GET /api/marketer/links`. */
+/** Backend `AffiliateLinkView` shape (marketer `_shared.md`) — DTO boundary. */
+interface AffiliateLinkDto {
+  id: string;
+  url: string;
+  targetId: string;
+  targetNameEn: string;
+  targetNameAr: string;
+  type: 'store' | 'product';
+  clicks: number;
+  conversions: number;
+  earned: number;
+  createdAt: string;
+}
+
+/** Maps the backend view onto the frontend model (drops `targetId`). */
+function toAffiliateLink(dto: AffiliateLinkDto): AffiliateLink {
+  return {
+    id: dto.id,
+    url: dto.url,
+    targetNameEn: dto.targetNameEn,
+    targetNameAr: dto.targetNameAr,
+    type: dto.type,
+    clicks: dto.clicks,
+    conversions: dto.conversions,
+    earned: dto.earned,
+    createdAt: dto.createdAt,
+  };
+}
+
+/**
+ * Resolves the target id/type from an affiliate URL (`/store/<id>` or
+ * `/product/<id>`). The backend `POST /marketer/links/generate` contract is
+ * keyed by target, not by URL — see `marketer.dto.ts`.
+ */
+function extractTargetId(url: string): { targetId: string; targetType: 'store' | 'product' } | null {
+  const store = url.match(/(?:\/|^)store\/([^/?#]+)/i);
+  if (store) return { targetId: store[1], targetType: 'store' };
+  const product = url.match(/(?:\/|^)product\/([^/?#]+)/i);
+  if (product) return { targetId: product[1], targetType: 'product' };
+  return null;
+}
+
+/** GET /marketer/links — the marketer's links with accumulated stats. */
 export async function getAffiliateLinks(): Promise<AffiliateLink[]> {
-  return new Promise(resolve => setTimeout(() => resolve(INITIAL_LINKS), 100));
+  const data = await api.get<AffiliateLinkDto[] | { items: AffiliateLinkDto[] }>('/marketer/links', {
+    page: 1,
+    pageSize: 100,
+  });
+  return unwrapList(data).map(toAffiliateLink);
 }
 
-/** Simulates `GET /api/marketer/targets`. */
+/** GET /marketer/targets — the link-generator dropdown (stores + products). */
 export async function getAffiliateTargets(): Promise<AffiliateTarget[]> {
-  return new Promise(resolve => setTimeout(() => resolve(AFFILIATE_TARGETS), 100));
+  const data = await api.get<AffiliateTarget[]>('/marketer/targets');
+  return unwrapList(data);
 }
 
-/** Simulates `POST /api/marketer/links` (new link starts with zero stats). */
+/** POST /marketer/links/generate — idempotent: reuses an existing link per target. */
 export async function createAffiliateLink(
   link: Omit<AffiliateLink, 'id' | 'clicks' | 'conversions' | 'earned' | 'createdAt'>
 ): Promise<AffiliateLink> {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      const created: AffiliateLink = {
-        ...link,
-        id: `al${Date.now()}`,
-        clicks: 0,
-        conversions: 0,
-        earned: 0,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      INITIAL_LINKS.push(created);
-      resolve(created);
-    }, 100)
-  );
+  const target = extractTargetId(link.url);
+  if (!target) {
+    throw new ApiError('Cannot resolve the target id from the link URL', 400, 'INVALID_LINK_URL');
+  }
+  const dto = await api.post<AffiliateLinkDto>('/marketer/links/generate', target);
+  return toAffiliateLink(dto);
 }

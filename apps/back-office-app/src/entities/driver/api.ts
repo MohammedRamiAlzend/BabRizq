@@ -6,6 +6,7 @@
  * the legacy monolith.
  */
 import { MockDriver } from './model';
+import { api } from '@/shared/lib/api';
 
 /** In-memory driver roster. TODO(migration): replaced by `GET /api/backoffice/drivers`. */
 export const MOCK_DRIVERS: MockDriver[] = [
@@ -15,7 +16,24 @@ export const MOCK_DRIVERS: MockDriver[] = [
   { id: 'd4', nameEn: 'Majed Saleh', nameAr: 'ماجد صالح', phone: '+966 55 456 7890', available: true },
 ];
 
-/** Simulates `GET /api/backoffice/drivers`. */
+/** Backend `DriverView` shape (back-office `_shared.md`) — DTO boundary. */
+interface DriverDto {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  phone: string;
+  available: boolean;
+  activeOrderId?: string;
+}
+
+/** GET /backoffice/drivers — the delivery driver roster. */
 export async function getDrivers(): Promise<MockDriver[]> {
-  return new Promise(resolve => setTimeout(() => resolve(MOCK_DRIVERS), 100));
+  const drivers = await api.get<DriverDto[]>('/backoffice/drivers');
+  return drivers.map((driver) => ({
+    id: driver.id,
+    nameEn: driver.nameEn,
+    nameAr: driver.nameAr,
+    phone: driver.phone,
+    available: driver.available,
+  }));
 }

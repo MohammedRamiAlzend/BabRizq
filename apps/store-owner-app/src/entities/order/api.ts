@@ -7,6 +7,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { StoreOrder } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory orders. TODO(migration): replaced by `GET /api/store-owner/orders`. */
 export const STORE_ORDERS: StoreOrder[] = [
@@ -97,32 +98,60 @@ export const STORE_ORDERS: StoreOrder[] = [
   },
 ];
 
-/** Simulates `GET /api/store-owner/orders?status={status}`. */
+/** Backend `StoreOrderView` shape (store `orders.md`) — DTO boundary. */
+interface StoreOrderDto {
+  id: string;
+  orderNumber: string;
+  date: string;
+  customerNameEn: string;
+  customerNameAr: string;
+  customerAddress?: string;
+  items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+  total: number;
+  currency: string;
+  status: string;
+}
+
+/**
+ * Maps the backend view onto the frontend `StoreOrder` model. NOTE: the
+ * backend runs the canonical 6-step flow (`assigned`/`picked_up`/`in_transit`
+ * replace the legacy `shipped`), so the status is cast to the legacy union.
+ */
+function toStoreOrder(dto: StoreOrderDto): StoreOrder {
+  return {
+    id: dto.id,
+    orderNumber: dto.orderNumber,
+    date: dto.date,
+    customerNameEn: dto.customerNameEn,
+    customerNameAr: dto.customerNameAr,
+    customerAddress: dto.customerAddress,
+    items: dto.items,
+    total: dto.total,
+    currency: dto.currency,
+    status: dto.status as StoreOrder['status'],
+  };
+}
+
+/** GET /store/orders?status= — the store owner's incoming orders. */
 export async function getStoreOrders(
   status?: StoreOrder['status']
 ): Promise<StoreOrder[]> {
-  return new Promise(resolve =>
-    setTimeout(
-      () => resolve(status ? STORE_ORDERS.filter(o => o.status === status) : STORE_ORDERS),
-      100
-    )
-  );
+  const data = await api.get<StoreOrderDto[] | { items: StoreOrderDto[] }>('/store/orders', {
+    page: 1,
+    pageSize: 100,
+    status,
+  });
+  return unwrapList(data).map(toStoreOrder);
 }
 
-/** Simulates `PUT /api/store-owner/orders/{id}/status`. */
+/**
+ * PUT /store/orders/{id}/status — advance the order one step forward in the
+ * canonical flow (invalid jumps are rejected by the backend with 422).
+ */
 export async function updateOrderStatus(
   id: string,
   status: StoreOrder['status']
 ): Promise<StoreOrder> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const order = STORE_ORDERS.find(o => o.id === id);
-      if (!order) {
-        reject(new Error('Order not found'));
-        return;
-      }
-      order.status = status;
-      resolve(order);
-    }, 100)
-  );
+  const dto = await api.put<StoreOrderDto>(`/store/orders/${id}/status`, { status });
+  return toStoreOrder(dto);
 }

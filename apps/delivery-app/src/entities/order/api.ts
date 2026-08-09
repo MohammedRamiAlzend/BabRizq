@@ -9,6 +9,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { FullOrder, FullOrderStatus } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory order book. TODO(migration): replaced by `GET /api/delivery/orders`. */
 export const ALL_ORDERS: FullOrder[] = [
@@ -100,42 +101,83 @@ export const ALL_ORDERS: FullOrder[] = [
   },
 ];
 
-/** Simulates `GET /api/delivery/orders?status={status}`. */
-export async function getDeliveryOrders(status?: FullOrderStatus): Promise<FullOrder[]> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(status ? ALL_ORDERS.filter(o => o.status === status) : ALL_ORDERS), 100)
-  );
+/** Backend `DeliveryOrderView` shape (delivery `_shared.md`) — DTO boundary. */
+interface DeliveryOrderDto {
+  id: string;
+  orderNumber: string;
+  date: string;
+  customerNameEn: string;
+  customerNameAr: string;
+  addressEn: string;
+  addressAr: string;
+  customerPhone: string;
+  storeNameEn: string;
+  storeNameAr: string;
+  storeAddressEn: string;
+  storeAddressAr: string;
+  items: { nameEn: string; nameAr: string; qty: number; price?: number }[];
+  total: number;
+  status: string;
+  assignedDriverId?: string;
+  proofOfDelivery?: string;
 }
 
-/** Simulates `PUT /api/delivery/orders/{id}/status`. */
+/** Maps the backend view onto the shared `FullOrder` contract. */
+function toDeliveryOrder(dto: DeliveryOrderDto): FullOrder {
+  return {
+    id: dto.id,
+    orderNumber: dto.orderNumber,
+    date: dto.date,
+    customerNameEn: dto.customerNameEn,
+    customerNameAr: dto.customerNameAr,
+    customerPhone: dto.customerPhone,
+    addressEn: dto.addressEn,
+    addressAr: dto.addressAr,
+    storeNameEn: dto.storeNameEn,
+    storeNameAr: dto.storeNameAr,
+    storeAddressEn: dto.storeAddressEn,
+    storeAddressAr: dto.storeAddressAr,
+    items: dto.items.map((item) => ({ nameEn: item.nameEn, nameAr: item.nameAr, qty: item.qty, price: item.price ?? 0 })),
+    total: dto.total,
+    status: dto.status as FullOrderStatus,
+    assignedDriverId: dto.assignedDriverId ?? null,
+    assignedDriverEn: null,
+    assignedDriverAr: null,
+    proofOfDelivery: dto.proofOfDelivery,
+  };
+}
+
+/**
+ * GET /delivery/orders?status= — the driver's orders. The one list endpoint
+ * serves the active-orders, history and overview pages via the status filter.
+ */
+export async function getDeliveryOrders(status?: FullOrderStatus): Promise<FullOrder[]> {
+  const data = await api.get<DeliveryOrderDto[] | { items: DeliveryOrderDto[] }>('/delivery/orders', {
+    status,
+  });
+  return unwrapList(data).map(toDeliveryOrder);
+}
+
+/** PUT /delivery/orders/{id}/status — forward-only along the canonical flow. */
 export async function updateDeliveryOrderStatus(
   id: string,
   status: FullOrderStatus
 ): Promise<FullOrder> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const order = ALL_ORDERS.find(o => o.id === id);
-      if (!order) {
-        reject(new Error('Order not found'));
-        return;
-      }
-      order.status = status;
-      resolve(order);
-    }, 100)
-  );
+  const dto = await api.put<DeliveryOrderDto>(`/delivery/orders/${id}/status`, { status });
+  return toDeliveryOrder(dto);
 }
 
-/** Simulates `POST /api/delivery/orders/{id}/proof-of-delivery`. */
+/**
+ * PUT /delivery/orders/{id}/proof — uploads proof of delivery.
+ * The backend expects a multipart `file` field, so a URL/data-URL proof is
+ * fetched into a Blob before upload, then the refreshed order is returned.
+ */
 export async function setOrderProofOfDelivery(id: string, proof: string): Promise<FullOrder> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const order = ALL_ORDERS.find(o => o.id === id);
-      if (!order) {
-        reject(new Error('Order not found'));
-        return;
-      }
-      order.proofOfDelivery = proof;
-      resolve(order);
-    }, 100)
-  );
+  const blob = await (await fetch(proof)).blob();
+  const formData = new FormData();
+  formData.append('file', blob, 'proof-of-delivery.jpg');
+  await api.upload<{ proofUrl: string }>(`/delivery/orders/${id}/proof`, formData);
+
+  const dto = await api.get<DeliveryOrderDto>(`/delivery/orders/${id}`);
+  return toDeliveryOrder(dto);
 }

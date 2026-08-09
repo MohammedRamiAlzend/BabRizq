@@ -7,6 +7,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { StoreProduct } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory catalogue. TODO(migration): replaced by `GET /api/store-owner/products`. */
 export const STORE_PRODUCTS: StoreProduct[] = [
@@ -128,60 +129,110 @@ export const STORE_PRODUCTS: StoreProduct[] = [
   },
 ];
 
-/** Simulates `GET /api/store-owner/products`. */
+/** Backend `StoreProductView` shape (store `products.md`) — DTO boundary. */
+interface StoreProductDto {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  descriptionEn: string;
+  descriptionAr: string;
+  images: string[];
+  price: number;
+  currencyPrices: { currency: string; amount: number }[];
+  stock: number;
+  categoryId: string;
+  sku?: string;
+  hasOffer: boolean;
+}
+
+/**
+ * Maps the backend view onto the frontend `StoreProduct` model. `priceHistory`
+ * and the bilingual category names are not part of the products endpoint — the
+ * former arrives with the accounting phase, the latter with a category lookup.
+ */
+function toStoreProduct(dto: StoreProductDto): StoreProduct {
+  return {
+    id: dto.id,
+    nameEn: dto.nameEn,
+    nameAr: dto.nameAr,
+    descriptionEn: dto.descriptionEn,
+    descriptionAr: dto.descriptionAr,
+    images: dto.images,
+    image: dto.images[0] ?? '',
+    price: dto.price,
+    currencyPrices: dto.currencyPrices,
+    priceHistory: [],
+    stock: dto.stock,
+    categoryId: dto.categoryId,
+    categoryEn: '',
+    categoryAr: '',
+    sku: dto.sku,
+  };
+}
+
+/** Maps a frontend create input onto the backend `CreateProductDto`. */
+function toCreateProductDto(input: Omit<StoreProduct, 'id'>) {
+  return {
+    nameEn: input.nameEn,
+    nameAr: input.nameAr,
+    descriptionEn: input.descriptionEn,
+    descriptionAr: input.descriptionAr,
+    images: input.images.length > 0 ? input.images : input.image ? [input.image] : [],
+    price: input.price,
+    stock: input.stock,
+    categoryId: input.categoryId,
+    ...(input.sku ? { sku: input.sku } : {}),
+  };
+}
+
+/** GET /store/products — the store owner's catalogue (X-Store-Id scoped). */
 export async function getStoreProducts(): Promise<StoreProduct[]> {
-  return new Promise(resolve => setTimeout(() => resolve(STORE_PRODUCTS), 100));
+  const data = await api.get<StoreProductDto[] | { items: StoreProductDto[] }>('/store/products', {
+    page: 1,
+    pageSize: 100,
+  });
+  return unwrapList(data).map(toStoreProduct);
 }
 
-/** Simulates `GET /api/store-owner/products/{id}`. */
+/**
+ * GET /store/products (no detail route exists) — resolves a single product
+ * from the list response to keep the legacy signature.
+ */
 export async function getStoreProductById(id: string): Promise<StoreProduct | null> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(STORE_PRODUCTS.find(p => p.id === id) || null), 100)
-  );
+  const products = await getStoreProducts();
+  return products.find(p => p.id === id) ?? null;
 }
 
-/** Simulates `POST /api/store-owner/products`. */
+/** POST /store/products — create a product for the authenticated store. */
 export async function createStoreProduct(
   input: Omit<StoreProduct, 'id'>
 ): Promise<StoreProduct> {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      const product: StoreProduct = { ...input, id: `sp${STORE_PRODUCTS.length + 1}` };
-      STORE_PRODUCTS.push(product);
-      resolve(product);
-    }, 100)
-  );
+  const dto = await api.post<StoreProductDto>('/store/products', toCreateProductDto(input));
+  return toStoreProduct(dto);
 }
 
-/** Simulates `PUT /api/store-owner/products/{id}`. */
+/** PUT /store/products/{id} — update the product (only provided fields). */
 export async function updateStoreProduct(
   id: string,
   updates: Partial<StoreProduct>
 ): Promise<StoreProduct> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const index = STORE_PRODUCTS.findIndex(p => p.id === id);
-      if (index === -1) {
-        reject(new Error('Product not found'));
-        return;
-      }
-      STORE_PRODUCTS[index] = { ...STORE_PRODUCTS[index], ...updates };
-      resolve(STORE_PRODUCTS[index]);
-    }, 100)
-  );
+  const body: Record<string, unknown> = {};
+  if (updates.nameEn !== undefined) body.nameEn = updates.nameEn;
+  if (updates.nameAr !== undefined) body.nameAr = updates.nameAr;
+  if (updates.descriptionEn !== undefined) body.descriptionEn = updates.descriptionEn;
+  if (updates.descriptionAr !== undefined) body.descriptionAr = updates.descriptionAr;
+  if (updates.price !== undefined) body.price = updates.price;
+  if (updates.stock !== undefined) body.stock = updates.stock;
+  if (updates.categoryId !== undefined) body.categoryId = updates.categoryId;
+  if (updates.sku !== undefined) body.sku = updates.sku;
+  if (updates.images !== undefined) body.images = updates.images;
+  else if (updates.image !== undefined) body.images = [updates.image];
+
+  const dto = await api.put<StoreProductDto>(`/store/products/${id}`, body);
+  return toStoreProduct(dto);
 }
 
-/** Simulates `DELETE /api/store-owner/products/{id}`. */
+/** DELETE /store/products/{id} — remove a product from the catalogue. */
 export async function deleteStoreProduct(id: string): Promise<void> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const index = STORE_PRODUCTS.findIndex(p => p.id === id);
-      if (index === -1) {
-        reject(new Error('Product not found'));
-        return;
-      }
-      STORE_PRODUCTS.splice(index, 1);
-      resolve();
-    }, 100)
-  );
+  await api.del<void>(`/store/products/${id}`);
 }

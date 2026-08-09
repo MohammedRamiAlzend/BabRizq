@@ -1,21 +1,33 @@
 /**
  * Auth feature — Delivery Driver application (single-role).
  *
- * Simulates `POST /api/auth/login` with demo credentials (username "1" / password "1")
- * and issues a mock JWT (payload mirrors the real contract: `nameidentifier` = user GUID,
- * `role`, `name`, `email`, `exp`). The session survives reloads via sessionStorage.
+ * Talks to the real Bab Rizq backend:
+ *   POST /auth/login (email + password) → { accessToken, refreshToken }
+ *   GET  /auth/me    (Bearer)            → user profile
  *
- * TODO(migration): replace `verifyCredentials`/`selectRole` with a real call to
- * `POST /api/auth/login` and validate the returned JWT server-side on every request.
+ * The access token (a JWT whose payload carries `sub`, `role`, `nameEn`,
+ * `nameAr`, `email`, `status`) is persisted in sessionStorage via the shared
+ * API client (`@/shared/lib/api`) and sent on every request. The session
+ * survives reloads by re-hydrating the user from the stored token.
+ *
+ * The legacy mock members (`verifyCredentials`, `selectRole`, `login`,
+ * `validateCredentials`) are kept exported for backward compatibility but are
+ * deprecated — new code must use `loginWithPassword`.
  */
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  clearSession,
+  fetchCurrentUser,
+  loginWithPassword as apiLogin,
+  setSession,
+} from '@/shared/lib/api';
 
 /** Union of every platform role — kept for type compatibility with shared UI. */
 export type UserRole = 'admin' | 'store_owner' | 'marketer' | 'back_office' | 'delivery' | 'customer';
 
-/** Shape of the authenticated user (matches the JWT payload of the real API). */
+/** Shape of the authenticated user (maps from the backend profile / JWT claims). */
 export interface MockUser {
-  id: string; // GUID — the "nameidentifier" claim
+  id: string; // GUID — the "sub" / "nameidentifier" claim
   name: string;
   nameAr: string;
   email: string;
@@ -26,21 +38,27 @@ export interface MockUser {
 /** The single role this application serves. */
 const APP_ROLE: UserRole = 'delivery';
 
-/** Demo user for the delivery role. */
+/**
+ * Demo user for the delivery role — kept only for the deprecated
+ * `selectRole` shim. Real sessions come from the backend.
+ */
 const MOCK_USER: MockUser = {
-  id: 'e5f6a7b8-c9d0-1234-efab-345678901234',
+  id: 'd4e5f6a7-b8c9-0d1e-2f3a-456789abcdef',
   name: 'Delivery Driver',
   nameAr: 'سائق التوصيل',
   email: 'delivery@babrizq.com',
   role: 'delivery',
 };
 
-/** Demo credentials — same as the legacy app. */
+/**
+ * @deprecated Legacy demo check (username "1" / password "1"). The real auth
+ * flow uses `loginWithPassword` against the backend.
+ */
 export function validateCredentials(username: string, password: string): boolean {
   return username === '1' && password === '1';
 }
 
-/** Builds a mock JWT (base64url header + payload + fake signature). */
+/** @deprecated Mock-JWT builder — kept only for the `selectRole` shim. */
 function buildMockJwt(user: MockUser): string {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const payload = btoa(JSON.stringify({
@@ -54,6 +72,7 @@ function buildMockJwt(user: MockUser): string {
   return `${header}.${payload}.${btoa('mock-signature')}`;
 }
 
+/** Decodes a JWT payload without verifying the signature (client-side display only). */
 function parseJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split('.');
@@ -69,8 +88,14 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   credentialsVerified: boolean;
+  /**
+   * Real login: POST /auth/login then hydrate the session. Resolves `true`
+   * on success, `false` on invalid credentials or network failure.
+   */
+  loginWithPassword: (email: string, password: string) => Promise<boolean>;
+  /** @deprecated Legacy sync check — use `loginWithPassword`. */
   verifyCredentials: (username: string, password: string) => boolean;
-  /** Logs in the app's single role. Any other role is ignored. */
+  /** @deprecated Mock-role login — real auth is server-side now. */
   selectRole: (role: UserRole) => void;
   logout: () => void;
   /** @deprecated alias of selectRole — kept for compatibility. */
@@ -84,53 +109,94 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [credentialsVerified, setCredentialsVerified] = useState(false);
 
-  const verifyCredentials = (username: string, password: string): boolean => {
-    const ok = validateCredentials(username, password);
-    if (ok) setCredentialsVerified(true);
-    return ok;
-  };
+  /** Hydrates the session from a (real) access token by decoding its claims. */
+  const applyToken = useCallback((accessToken: string, role: UserRole): boolean => {
+    const payload = parseJwtPayload(accessToken);
+    if (!payload || payload.role !== role) return false;
+    const id = (payload.nameidentifier as string) ?? (payload.sub as string) ?? '';
+    setUser({
+      id,
+      name: (payload.name as string) ?? (payload.nameEn as string) ?? '',
+      nameAr: (payload.nameAr as string) ?? '',
+      email: (payload.email as string) ?? '',
+      role: payload.role as UserRole,
+    });
+    setToken(accessToken);
+    setCredentialsVerified(true);
+    return true;
+  }, []);
 
+  const loginWithPassword = useCallback(
+    async (email: string, password: string): Promise<boolean> => {
+      try {
+        const tokens = await apiLogin(email, password);
+        setSession(tokens, APP_ROLE);
+        if (!applyToken(tokens.accessToken, APP_ROLE)) return false;
+
+        // Enrich with the freshest profile (silent — never fails the login).
+        void fetchCurrentUser()
+          .then(profile =>
+            setUser(prev =>
+              prev
+                ? {
+                    ...prev,
+                    name: profile.nameEn,
+                    nameAr: profile.nameAr,
+                    email: profile.email,
+                  }
+                : prev
+            )
+          )
+          .catch(() => undefined);
+        return true;
+      } catch {
+        setCredentialsVerified(false);
+        return false;
+      }
+    },
+    [applyToken]
+  );
+
+  /** @deprecated Legacy mock login — kept so no consumer breaks. */
   const selectRole = (role: UserRole) => {
     if (role !== APP_ROLE) return; // this app only serves its own role
+    console.warn('[auth] selectRole is deprecated — use loginWithPassword(email, password).');
     const jwt = buildMockJwt(MOCK_USER);
-    setToken(jwt);
-    setUser(MOCK_USER);
-    sessionStorage.setItem('babrizq_token', jwt);
-    sessionStorage.setItem('babrizq_role', role);
+    setSession({ accessToken: jwt, refreshToken: '' }, role);
+    applyToken(jwt, role);
   };
 
   const logout = () => {
+    clearSession();
     setUser(null);
     setToken(null);
     setCredentialsVerified(false);
-    sessionStorage.removeItem('babrizq_token');
-    sessionStorage.removeItem('babrizq_role');
   };
 
-  // Restore the session on mount.
-  React.useEffect(() => {
-    const storedToken = sessionStorage.getItem('babrizq_token');
-    if (storedToken) {
-      const payload = parseJwtPayload(storedToken);
-      if (payload && payload.role === APP_ROLE) {
-        setUser(MOCK_USER);
-        setToken(storedToken);
-        setCredentialsVerified(true);
-      }
+  // Restore the session on mount from the persisted token.
+  useEffect(() => {
+    try {
+      const storedToken = sessionStorage.getItem('babrizq_token');
+      if (storedToken) applyToken(storedToken, APP_ROLE);
+    } catch {
+      // Non-browser environment — nothing to restore.
     }
-  }, []);
+  }, [applyToken]);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      token,
-      isAuthenticated: !!user,
-      credentialsVerified,
-      verifyCredentials,
-      selectRole,
-      logout,
-      login: selectRole,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isAuthenticated: !!user,
+        credentialsVerified,
+        loginWithPassword,
+        verifyCredentials: validateCredentials,
+        selectRole,
+        logout,
+        login: selectRole,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -18,7 +18,7 @@ import logo from '@/assets/logo.png';
 const HOME_ROUTE = '/store';
 
 const LoginPage = () => {
-  const { verifyCredentials, selectRole } = useAuth();
+  const { loginWithPassword } = useAuth();
   const { t } = useLocale();
   const navigate = useNavigate();
 
@@ -28,22 +28,19 @@ const LoginPage = () => {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setIsLoading(true);
 
-    // Simulate a short network round-trip, then log in.
-    setTimeout(() => {
-      const ok = verifyCredentials(username, password);
-      if (!ok) {
-        setLoginError(t('Invalid username or password.', 'اسم المستخدم أو كلمة المرور غير صحيحة.'));
-      } else {
-        selectRole('customer');
-        navigate(HOME_ROUTE);
-      }
-      setIsLoading(false);
-    }, 400);
+    // Real login against the backend (POST /auth/login).
+    const ok = await loginWithPassword(username, password);
+    if (!ok) {
+      setLoginError(t('Invalid email or password.', 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'));
+    } else {
+      navigate(HOME_ROUTE);
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -86,12 +83,12 @@ const LoginPage = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">{t('Username', 'اسم المستخدم')}</label>
+              <label className="block text-sm font-medium text-foreground">{t('Email', 'البريد الإلكتروني')}</label>
               <input
                 type="text"
-                autoComplete="username"
+                autoComplete="email"
                 required
-                placeholder={t('Enter username', 'أدخل اسم المستخدم')}
+                placeholder={t('Enter email', 'أدخل البريد الإلكتروني')}
                 value={username}
                 onChange={e => { setUsername(e.target.value); setLoginError(''); }}
                 className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
@@ -143,10 +140,10 @@ const LoginPage = () => {
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {t('Demo credentials — username:', 'بيانات تجريبية — اسم المستخدم:')}
-            <span className="font-mono font-semibold"> 1 </span>
+            {t('Demo credentials — email:', 'بيانات تجريبية — البريد الإلكتروني:')}
+            <span className="font-mono font-semibold"> customer@babrizq.com </span>
             {t('/ password:', '/ كلمة المرور:')}
-            <span className="font-mono font-semibold"> 1</span>
+            <span className="font-mono font-semibold"> Password123!</span>
           </p>
         </div>
       </div>

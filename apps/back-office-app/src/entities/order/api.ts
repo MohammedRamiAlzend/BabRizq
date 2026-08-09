@@ -9,6 +9,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { FullOrder, FullOrderStatus } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory order book. TODO(migration): replaced by `GET /api/backoffice/orders`. */
 export const ALL_ORDERS: FullOrder[] = [
@@ -100,19 +101,80 @@ export const ALL_ORDERS: FullOrder[] = [
   },
 ];
 
-/** Simulates `GET /api/backoffice/orders?status={status}`. */
+/** Backend `FullOrderView` shape (back-office `_shared.md`) — DTO boundary. */
+interface FullOrderDto {
+  id: string;
+  orderNumber: string;
+  date: string;
+  customerNameEn: string;
+  customerNameAr: string;
+  addressEn: string;
+  addressAr: string;
+  customerPhone: string;
+  storeNameEn: string;
+  storeNameAr: string;
+  storeAddressEn: string;
+  storeAddressAr: string;
+  items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+  total: number;
+  currency: string;
+  status: string;
+  assignedDriverId?: string;
+  assignedDriverEn?: string;
+  assignedDriverAr?: string;
+  proofOfDelivery?: 'photo_uploaded' | 'signature_captured';
+  stockWarnings?: {
+    itemNameEn: string;
+    itemNameAr: string;
+    requestedQty: number;
+    availableQty: number;
+  }[];
+}
+
+/** Maps the backend view onto the shared `FullOrder` contract. */
+function toFullOrder(dto: FullOrderDto): FullOrder {
+  return {
+    id: dto.id,
+    orderNumber: dto.orderNumber,
+    date: dto.date,
+    customerNameEn: dto.customerNameEn,
+    customerNameAr: dto.customerNameAr,
+    customerPhone: dto.customerPhone,
+    addressEn: dto.addressEn,
+    addressAr: dto.addressAr,
+    storeNameEn: dto.storeNameEn,
+    storeNameAr: dto.storeNameAr,
+    storeAddressEn: dto.storeAddressEn,
+    storeAddressAr: dto.storeAddressAr,
+    items: dto.items,
+    total: dto.total,
+    status: dto.status as FullOrderStatus,
+    assignedDriverId: dto.assignedDriverId ?? null,
+    assignedDriverEn: dto.assignedDriverEn ?? null,
+    assignedDriverAr: dto.assignedDriverAr ?? null,
+    proofOfDelivery: dto.proofOfDelivery,
+  };
+}
+
+/** GET /backoffice/orders?status=&search= — the fulfilment order book. */
 export async function getBackOfficeOrders(
   status?: FullOrderStatus
 ): Promise<FullOrder[]> {
-  return new Promise(resolve =>
-    setTimeout(
-      () => resolve(status ? ALL_ORDERS.filter(o => o.status === status) : ALL_ORDERS),
-      100
-    )
-  );
+  const data = await api.get<FullOrderDto[] | { items: FullOrderDto[] }>('/backoffice/orders', {
+    page: 1,
+    pageSize: 100,
+    status,
+  });
+  return unwrapList(data).map(toFullOrder);
 }
 
-/** Simulates `PUT /api/backoffice/orders/{id}/status`. */
+/**
+ * NOTE — deliberately NOT wired to the backend: the backend has no direct
+ * back-office status advance. Order status is driven by the delivery driver
+ * (`PUT /delivery/orders/{id}/status`), keeping every role in sync. This
+ * legacy mock remains for page rendering until that flow is migrated.
+ * @deprecated Prefer the delivery driver flow.
+ */
 export async function updateBackOfficeOrderStatus(
   id: string,
   status: FullOrderStatus
@@ -130,26 +192,13 @@ export async function updateBackOfficeOrderStatus(
   );
 }
 
-/**
- * Simulates `PUT /api/backoffice/orders/{id}/assign-driver`.
- * Assigns a driver (by name) and moves the order to `assigned`.
- */
+/** PUT /backoffice/orders/{id}/assign-driver — assigns a driver and moves the order to `assigned`. */
 export async function assignDriverToOrder(
   id: string,
   driver: { id: string; nameEn: string; nameAr: string }
 ): Promise<FullOrder> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const order = ALL_ORDERS.find(o => o.id === id);
-      if (!order) {
-        reject(new Error('Order not found'));
-        return;
-      }
-      order.assignedDriverId = driver.id;
-      order.assignedDriverEn = driver.nameEn;
-      order.assignedDriverAr = driver.nameAr;
-      order.status = 'assigned';
-      resolve(order);
-    }, 100)
-  );
+  const dto = await api.put<FullOrderDto>(`/backoffice/orders/${id}/assign-driver`, {
+    driverId: driver.id,
+  });
+  return toFullOrder(dto);
 }
