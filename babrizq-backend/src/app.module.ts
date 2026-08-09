@@ -10,8 +10,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { resolve } from 'node:path';
 import configuration, { AppConfig } from './shared/config/configuration';
-import { validate } from './shared/config/env.validation';
+import { validate, StorageDriver } from './shared/config/env.validation';
 import { ApiExceptionFilter } from './shared/common/response/api-exception.filter';
 import { ApiResponseInterceptor } from './shared/common/response/api-response.interceptor';
 import { JwtAuthGuard } from './shared/common/guards/jwt-auth.guard';
@@ -19,6 +21,7 @@ import { RolesGuard } from './shared/common/guards/roles.guard';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -40,10 +43,25 @@ import { HealthModule } from './modules/health/health.module';
       ],
     }),
 
+    // ---- Local uploads at /uploads/* (only when the local driver is active) ----
+    ServeStaticModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<AppConfig, true>) =>
+        config.get('storage.driver', { infer: true }) === StorageDriver.Local
+          ? [
+              {
+                rootPath: resolve(config.get('storage.path', { infer: true })),
+                serveRoot: '/uploads',
+              },
+            ]
+          : [],
+    }),
+
     // ---- Feature modules ----
     PrismaModule,
     AuthModule,
     HealthModule,
+    StorageModule,
   ],
   providers: [
     // Guard order matters: throttle → auth → roles.
