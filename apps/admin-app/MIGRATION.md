@@ -10,7 +10,7 @@
 | `src/pages/AdminSettings.tsx` | `src/pages/AdminSettings.tsx` | copied verbatim |
 | `src/pages/AdminProfile.tsx` | `src/pages/AdminProfile.tsx` | copied verbatim |
 | `src/pages/LoginPage.tsx` | `src/pages/LoginPage.tsx` | **rewritten** — single-role |
-| `src/entities/adminData.ts` | `src/entities/adminData.ts` | interfaces `PlatformUser`, `PlatformSettings` + mocks |
+| `src/entities/adminData.ts` | `src/entities/{user,stats,settings}/` | **Phase 2** — three FSD slices |
 | `src/shared/ui/AdminSidebar.tsx` | `src/shared/ui/AdminSidebar.tsx` | copied verbatim |
 | shared ui/contexts/hooks/lib + AppHeader/NavLink/Pagination | `packages/shared/…` | shared via aliases |
 | `needed-endpoints-for-backend/admin/*` | `docs/needed-endpoints-from-backend/…` | generated at migration time |
@@ -36,10 +36,21 @@
 ## 4. Validation
 
 ```bash
-bun install && bun run typecheck && bun run build
+bun install && bun run typecheck && bun run test && bun run build
 ```
 
-## 5. Future cleanup (Phase 2)
+## 5. Phase 2 completed (entity layer cleanup)
 
-- Split `adminData.ts` into `model.ts` + `api.ts`.
-- Add Vitest/Playwright coverage; introduce `VITE_API_URL` when the backend lands.
+Done on `feat/admin-app-implementation`:
+
+- **Entity slices** — `entities/adminData.ts` is gone, replaced by three FSD domain slices,
+  each `model.ts` (interfaces) + `api.ts` (fetch-ready mocks annotated with the endpoint they
+  simulate via `TODO(migration)`) + `index.ts` (barrel):
+  `entities/user` (PlatformUser, role mutations), `entities/stats` (platform KPIs),
+  `entities/settings` (platform config).
+- **Strict TypeScript** — `strict: true` + `noImplicitAny: true`; the app typechecks clean.
+- **Tests** — Vitest (`bun run test`): 3 files covering the user/stats/settings APIs (11 tests).
+
+## 6. Future cleanup (Phase 3+)
+
+- Add Playwright e2e coverage; introduce `VITE_API_URL` when the backend lands.
