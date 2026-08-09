@@ -38,7 +38,10 @@
 import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_OFFERS, STORE_PRODUCTS, STORE_CATEGORIES, Offer, CURRENCIES } from '~/entities/storeOwnerData';
+import { STORE_OFFERS, Offer } from '~/entities/offer';
+import { STORE_PRODUCTS } from '~/entities/product';
+import { STORE_CATEGORIES } from '~/entities/category';
+import { CURRENCIES } from '~/entities/currency';
 import { todayDate } from '@/shared/lib/utils';
 
 function offerStatus(offer: Offer): 'active' | 'upcoming' | 'ended' {

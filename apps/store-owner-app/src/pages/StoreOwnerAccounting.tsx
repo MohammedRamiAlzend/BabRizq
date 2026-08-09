@@ -44,9 +44,10 @@ import {
 } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import {
-  STORE_EXPENSES, STORE_INVOICES, MONTHLY_SALES_DATA,
+  STORE_EXPENSES, STORE_INVOICES,
   Expense, Invoice,
-} from '~/entities/storeOwnerData';
+} from '~/entities/accounting';
+import { MONTHLY_SALES_DATA } from '~/entities/sales';
 import { todayDate } from '@/shared/lib/utils';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,

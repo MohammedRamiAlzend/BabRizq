@@ -45,9 +45,12 @@ import {
 } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import {
-  STORE_PRODUCTS, STORE_CATEGORIES, STORE_OFFERS,
-  StoreProduct, CurrencyPrice, PriceEntry, CURRENCIES,
-} from '~/entities/storeOwnerData';
+  STORE_PRODUCTS,
+  StoreProduct, CurrencyPrice, PriceEntry,
+} from '~/entities/product';
+import { STORE_CATEGORIES } from '~/entities/category';
+import { STORE_OFFERS } from '~/entities/offer';
+import { CURRENCIES } from '~/entities/currency';
 import { OrderStatusBadge } from '@/pages/StoreOwnerOverview';
 import { todayDate } from '@/shared/lib/utils';
 import { usePagination } from '@/shared/hooks/usePagination';

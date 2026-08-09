@@ -22,7 +22,9 @@
 
 import { useState } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_ORDERS, MONTHLY_SALES_DATA, STORE_PRODUCTS, CURRENCY_REVENUE } from '~/entities/storeOwnerData';
+import { STORE_ORDERS } from '~/entities/order';
+import { MONTHLY_SALES_DATA, CURRENCY_REVENUE } from '~/entities/sales';
+import { STORE_PRODUCTS } from '~/entities/product';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend,

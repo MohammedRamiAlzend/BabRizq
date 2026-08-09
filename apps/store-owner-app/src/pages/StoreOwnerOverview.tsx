@@ -23,7 +23,9 @@
 
 import { DollarSign, ShoppingCart, TrendingUp, AlertTriangle, ShoppingBag } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_ORDERS, STORE_PRODUCTS, MONTHLY_SALES_DATA, CURRENCY_REVENUE } from '~/entities/storeOwnerData';
+import { STORE_ORDERS } from '~/entities/order';
+import { STORE_PRODUCTS } from '~/entities/product';
+import { MONTHLY_SALES_DATA, CURRENCY_REVENUE } from '~/entities/sales';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,

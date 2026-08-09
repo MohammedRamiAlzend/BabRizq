@@ -29,7 +29,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Shield } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { INITIAL_CHAT_MESSAGES, ChatMessage } from '~/entities/storeOwnerData';
+import { INITIAL_CHAT_MESSAGES, ChatMessage } from '~/entities/chat';
 
 const StoreOwnerChat = () => {
   const { t } = useLocale();
