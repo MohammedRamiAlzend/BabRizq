@@ -1,5 +1,5 @@
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { FullOrderStatus } from '~/entities/fulfillmentData';
+import type { FullOrderStatus } from '@/shared/lib/order';
 
 const STATUS_STYLES: Record<FullOrderStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',

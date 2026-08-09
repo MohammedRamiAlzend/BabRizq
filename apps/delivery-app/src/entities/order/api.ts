@@ -1,45 +1,16 @@
-export type FullOrderStatus = 'pending' | 'processing' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered';
+/**
+ * Order entity — mock API (delivery driver).
+ *
+ * Simulates the delivery endpoints from
+ * `docs/needed-endpoints-from-backend.md`:
+ * `GET /api/delivery/orders?status=` ·
+ * `PUT /api/delivery/orders/{id}/status` ·
+ * `POST /api/delivery/orders/{id}/proof-of-delivery`.
+ * Seed data is copied verbatim from the legacy monolith.
+ */
+import { FullOrder, FullOrderStatus } from './model';
 
-export interface FullOrder {
-  id: string;
-  orderNumber: string;
-  customerNameEn: string;
-  customerNameAr: string;
-  customerPhone: string;
-  addressEn: string;
-  addressAr: string;
-  /** Optional customer GPS coordinates for map display */
-  lat?: number;
-  lng?: number;
-  storeNameEn: string;
-  storeNameAr: string;
-  storeAddressEn: string;
-  storeAddressAr: string;
-  items: { nameEn: string; nameAr: string; qty: number; price: number }[];
-  total: number;
-  status: FullOrderStatus;
-  assignedDriverId: string | null;
-  assignedDriverEn: string | null;
-  assignedDriverAr: string | null;
-  date: string;
-  proofOfDelivery?: string;
-}
-
-export interface MockDriver {
-  id: string;
-  nameEn: string;
-  nameAr: string;
-  phone: string;
-  available: boolean;
-}
-
-export const MOCK_DRIVERS: MockDriver[] = [
-  { id: 'd1', nameEn: 'Yusuf Al-Mutairi', nameAr: 'يوسف المطيري', phone: '+966 55 123 4567', available: true },
-  { id: 'd2', nameEn: 'Hassan Farooq', nameAr: 'حسن فاروق', phone: '+966 55 234 5678', available: true },
-  { id: 'd3', nameEn: 'Ali Al-Dosari', nameAr: 'علي الدوسري', phone: '+966 55 345 6789', available: false },
-  { id: 'd4', nameEn: 'Majed Saleh', nameAr: 'ماجد صالح', phone: '+966 55 456 7890', available: true },
-];
-
+/** In-memory order book. TODO(migration): replaced by `GET /api/delivery/orders`. */
 export const ALL_ORDERS: FullOrder[] = [
   {
     id: 'fo1', orderNumber: '#BRQ-1042',
@@ -129,11 +100,42 @@ export const ALL_ORDERS: FullOrder[] = [
   },
 ];
 
+/** Simulates `GET /api/delivery/orders?status={status}`. */
+export async function getDeliveryOrders(status?: FullOrderStatus): Promise<FullOrder[]> {
+  return new Promise(resolve =>
+    setTimeout(() => resolve(status ? ALL_ORDERS.filter(o => o.status === status) : ALL_ORDERS), 100)
+  );
+}
 
+/** Simulates `PUT /api/delivery/orders/{id}/status`. */
+export async function updateDeliveryOrderStatus(
+  id: string,
+  status: FullOrderStatus
+): Promise<FullOrder> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const order = ALL_ORDERS.find(o => o.id === id);
+      if (!order) {
+        reject(new Error('Order not found'));
+        return;
+      }
+      order.status = status;
+      resolve(order);
+    }, 100)
+  );
+}
 
-
-
-
-
-
-
+/** Simulates `POST /api/delivery/orders/{id}/proof-of-delivery`. */
+export async function setOrderProofOfDelivery(id: string, proof: string): Promise<FullOrder> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const order = ALL_ORDERS.find(o => o.id === id);
+      if (!order) {
+        reject(new Error('Order not found'));
+        return;
+      }
+      order.proofOfDelivery = proof;
+      resolve(order);
+    }, 100)
+  );
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { FullOrder } from '~/entities/fulfillmentData';
+import type { FullOrder } from '@/shared/lib/order';
 import { Camera, CheckCircle2, ImagePlus, Navigation, X } from 'lucide-react';
 
 interface ProofOfDeliveryModalProps {

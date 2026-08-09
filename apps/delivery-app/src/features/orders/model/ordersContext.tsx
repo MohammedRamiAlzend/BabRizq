@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { ALL_ORDERS, FullOrder, FullOrderStatus, MOCK_DRIVERS } from '~/entities/fulfillmentData';
+import { ALL_ORDERS } from '~/entities/order';
+import type { FullOrder, FullOrderStatus } from '~/entities/order';
+import { MOCK_DRIVERS } from '~/entities/driver';
+import { assignDriver as applyAssignDriver, setProofOfDelivery as applyProof, updateStatus as applyStatus } from './orderModel';
 
 interface OrdersContextType {
   orders: FullOrder[];
@@ -10,25 +13,27 @@ interface OrdersContextType {
 
 const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
 
+/**
+ * Orders provider (delivery driver).
+ *
+ * Thin stateful wrapper over the pure functions in `./orderModel`; every
+ * mutation is an immutable update.
+ */
 export const OrdersProvider = ({ children }: { children: ReactNode }) => {
   const [orders, setOrders] = useState<FullOrder[]>(ALL_ORDERS);
 
   const assignDriver = useCallback((orderId: string, driverId: string) => {
     const driver = MOCK_DRIVERS.find(d => d.id === driverId);
     if (!driver) return;
-    setOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, assignedDriverId: driverId, assignedDriverEn: driver.nameEn, assignedDriverAr: driver.nameAr, status: 'assigned' as FullOrderStatus }
-        : o
-    ));
+    setOrders(prev => applyAssignDriver(prev, orderId, driver));
   }, []);
 
   const updateStatus = useCallback((orderId: string, status: FullOrderStatus) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    setOrders(prev => applyStatus(prev, orderId, status));
   }, []);
 
   const setProofOfDelivery = useCallback((orderId: string, proof: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, proofOfDelivery: proof } : o));
+    setOrders(prev => applyProof(prev, orderId, proof));
   }, []);
 
   return (
@@ -43,12 +48,3 @@ export const useOrders = () => {
   if (!ctx) throw new Error('useOrders must be used within OrdersProvider');
   return ctx;
 };
-
-
-
-
-
-
-
-
-
