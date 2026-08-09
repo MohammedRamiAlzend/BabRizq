@@ -17,7 +17,7 @@
 import { useState } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { MOCK_DRIVERS, MockDriver } from '~/entities/fulfillmentData';
+import { MOCK_DRIVERS, MockDriver } from '~/entities/driver';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import { Truck, Phone, Package, ToggleLeft, ToggleRight } from 'lucide-react';
 

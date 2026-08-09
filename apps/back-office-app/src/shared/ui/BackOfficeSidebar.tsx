@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LayoutDashboard, ClipboardList, Truck, Map, Bell, MessageSquare, Settings } from 'lucide-react';
 import { NavLink } from '@/shared/ui/NavLink';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { INITIAL_NOTIFICATIONS } from '~/entities/backOfficeData';
+import { INITIAL_NOTIFICATIONS } from '~/entities/notification';
 import {
   Sidebar,
   SidebarContent,

@@ -13,8 +13,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { MOCK_DRIVERS, FullOrderStatus } from '~/entities/fulfillmentData';
-import { STORE_PRODUCTS } from '~/entities/storeOwnerData';
+import { MOCK_DRIVERS } from '~/entities/driver';
+import { FullOrderStatus } from '~/entities/order';
+import { STORE_PRODUCTS } from '~/entities/product';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import {
   ArrowLeft,

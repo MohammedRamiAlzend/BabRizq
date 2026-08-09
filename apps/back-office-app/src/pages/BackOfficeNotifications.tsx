@@ -21,7 +21,7 @@ import {
   INITIAL_NOTIFICATIONS,
   BackOfficeNotification,
   BackOfficeNotificationType,
-} from '~/entities/backOfficeData';
+} from '~/entities/notification';
 import {
   Bell,
   ShoppingBag,
