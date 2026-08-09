@@ -5,6 +5,8 @@
 import { OrdersService } from './orders.service';
 import { OrderNumberService } from './order-number.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
+import { OffersService } from '../../offers/application/offers.service';
 
 /** Cart: 2 × headphones @ 299, store with taxRate 15 / deliveryFee 15. */
 const cartFixture = {
@@ -25,6 +27,7 @@ const cartFixture = {
         stock: 45,
         store: {
           id: 'store-techzone',
+          ownerUserId: 'owner-1',
           settings: { taxRate: 15, deliveryFee: 15, estimatedDeliveryDays: 2 },
         },
       },
@@ -49,6 +52,7 @@ const prisma = {
     count: jest.fn(),
   },
   cartItem: { deleteMany: jest.fn() },
+  offer: { update: jest.fn() },
   $transaction: jest.fn(),
 } as unknown as PrismaService;
 
@@ -56,7 +60,16 @@ const orderNumbers = {
   nextOrderNumber: jest.fn().mockResolvedValue('#BRQ-1043'),
 } as unknown as OrderNumberService;
 
-const service = new OrdersService(prisma, orderNumbers);
+const notifications = {
+  create: jest.fn().mockResolvedValue(undefined),
+} as unknown as NotificationsService;
+
+const offers = {
+  activeOffers: jest.fn().mockResolvedValue([]),
+  bestDiscount: jest.fn(() => ({ discount: 0, offerId: null })),
+} as unknown as OffersService;
+
+const service = new OrdersService(prisma, orderNumbers, notifications, offers);
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -99,6 +112,48 @@ describe('OrdersService.createOrder', () => {
     expect(prisma.cartItem.deleteMany).toHaveBeenCalledWith({
       where: { cartId: 'cart-1' },
     });
+  });
+
+  it('applies the best active offer, taxes the discounted subtotal, and tracks redemption', async () => {
+    (prisma.cart.findUnique as jest.Mock).mockResolvedValue(cartFixture);
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn(prisma));
+    (prisma.product.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    (offers.activeOffers as jest.Mock).mockResolvedValue([
+      { id: 'offer-1', productId: null, discountType: 'percent', discountValue: 10 },
+    ]);
+    (offers.bestDiscount as jest.Mock).mockReturnValue({
+      discount: 59.8,
+      offerId: 'offer-1',
+    });
+    (prisma.order.create as jest.Mock).mockResolvedValue({
+      id: 'order-2',
+      orderNumber: '#BRQ-1043',
+      status: 'pending',
+      createdAt: new Date('2026-08-09T10:00:00Z'),
+      items: [
+        { nameEn: 'Premium Wireless Headphones', nameAr: 'سماعات لاسلكية فاخرة', qty: 2, price: 299 },
+      ],
+    });
+
+    const order = await service.createOrder('customer-1', createOrderDto);
+
+    expect(order.discount).toBe(59.8);
+    // tax on (598 - 59.8) at 15% = 80.73; + 15 delivery → 633.93
+    expect(order.total).toBe(633.93);
+    expect(prisma.order.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ discount: 59.8, offerId: 'offer-1' }),
+      }),
+    );
+    expect(prisma.offer.update).toHaveBeenCalledWith({
+      where: { id: 'offer-1' },
+      data: { redemptionCount: { increment: 1 } },
+    });
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'new_order' }),
+      prisma,
+    );
   });
 
   it('rejects an empty cart with CART_EMPTY', async () => {

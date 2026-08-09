@@ -14,6 +14,8 @@ import { Order, Prisma } from '@prisma/client';
 import { ApiError } from '../../../shared/common/errors/api-error';
 import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
+import { OffersService } from '../../offers/application/offers.service';
 import { OrderNumberService } from './order-number.service';
 import { CreateOrderDto } from '../presentation/dto/orders.dto';
 
@@ -25,6 +27,7 @@ export interface OrderCreatedView {
   orderNumber: string;
   status: 'pending';
   items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+  discount: number;
   total: number;
   currency: string;
   estimatedDeliveryDays: number;
@@ -51,6 +54,7 @@ export interface OrderDetailView {
   deliveryAddress: string;
   items: { productId: string | null; nameEn: string; nameAr: string; qty: number; price: number }[];
   subtotal: number;
+  discount: number;
   deliveryFee: number;
   tax: number;
   total: number;
@@ -76,6 +80,8 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderNumbers: OrderNumberService,
+    private readonly notifications: NotificationsService,
+    private readonly offers: OffersService,
   ) {}
 
   /** POST /customer/orders — place an order from the current cart. */
@@ -117,9 +123,22 @@ export class OrdersService {
     const subtotal = round2(
       cart.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
     );
+
+    // Apply the best single active offer (no stacking) — tax is computed on
+    // the discounted subtotal per the promotions plan.
+    const activeOffers = await this.offers.activeOffers(storeId);
+    const { discount, offerId } = this.offers.bestDiscount(
+      activeOffers,
+      cart.items.map((item) => ({
+        productId: item.productId,
+        unitPrice: item.product.price,
+        qty: item.quantity,
+      })),
+    );
+    const taxable = round2(subtotal - discount);
     const deliveryFee = settings?.deliveryFee ?? 0;
-    const tax = round2(subtotal * ((settings?.taxRate ?? 0) / 100));
-    const total = round2(subtotal + deliveryFee + tax);
+    const tax = round2(taxable * ((settings?.taxRate ?? 0) / 100));
+    const total = round2(taxable + deliveryFee + tax);
     const orderNumber = await this.orderNumbers.nextOrderNumber();
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -152,9 +171,11 @@ export class OrdersService {
           paymentMethod: dto.paymentMethod ?? 'cash',
           notes: dto.notes ?? null,
           subtotal,
+          discount,
           deliveryFee,
           tax,
           total,
+          offerId: offerId ?? null,
           currency: 'SAR',
           items: {
             create: cart.items.map((item) => ({
@@ -170,6 +191,46 @@ export class OrdersService {
       });
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+      // Track the redemption for offer analytics, atomically with the order.
+      if (offerId) {
+        await tx.offer.update({
+          where: { id: offerId },
+          data: { redemptionCount: { increment: 1 } },
+        });
+      }
+
+      // Notify the store owner; flag products that dropped below the
+      // low-stock threshold so they can restock before the order ships.
+      await this.notifications.create(
+        store.ownerUserId,
+        {
+          type: 'new_order',
+          titleEn: 'New order received',
+          titleAr: 'طلب جديد',
+          bodyEn: `Order ${created.orderNumber} (${total} SAR) has been received.`,
+          bodyAr: `تم استلام الطلب ${created.orderNumber} (${total} ريال).`,
+          orderId: created.id,
+        },
+        tx,
+      );
+      for (const item of cart.items) {
+        const remaining = item.product.stock - item.quantity;
+        if (remaining < (settings?.lowStockThreshold ?? 10)) {
+          await this.notifications.create(
+            store.ownerUserId,
+            {
+              type: 'low_stock',
+              titleEn: 'Low stock',
+              titleAr: 'مخزون منخفض',
+              bodyEn: `"${item.product.nameEn}" is down to ${remaining} units.`,
+              bodyAr: `"${item.product.nameAr}" تبقى منه ${remaining} وحدة.`,
+              orderId: created.id,
+            },
+            tx,
+          );
+        }
+      }
       return created;
     });
 
@@ -183,6 +244,7 @@ export class OrdersService {
         qty: item.qty,
         price: item.price,
       })),
+      discount,
       total,
       currency: 'SAR',
       estimatedDeliveryDays: settings?.estimatedDeliveryDays ?? 2,
@@ -263,6 +325,7 @@ export class OrdersService {
         price: item.price,
       })),
       subtotal: order.subtotal,
+      discount: order.discount,
       deliveryFee: order.deliveryFee,
       tax: order.tax,
       total: order.total,
