@@ -22,6 +22,15 @@ import { PrismaModule } from './modules/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { StorefrontModule } from './modules/storefront/storefront.module';
+import { CartModule } from './modules/cart/cart.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { InterestsModule } from './modules/interests/interests.module';
+import { StoreModule } from './modules/store/store.module';
+import { BackofficeModule } from './modules/backoffice/backoffice.module';
+import { DeliveryModule } from './modules/delivery/delivery.module';
+import { MarketerModule } from './modules/marketer/marketer.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -62,6 +71,15 @@ import { StorageModule } from './modules/storage/storage.module';
     AuthModule,
     HealthModule,
     StorageModule,
+    StorefrontModule,
+    CartModule,
+    OrdersModule,
+    InterestsModule,
+    StoreModule,
+    BackofficeModule,
+    DeliveryModule,
+    MarketerModule,
+    AdminModule,
   ],
   providers: [
     // Guard order matters: throttle → auth → roles.
