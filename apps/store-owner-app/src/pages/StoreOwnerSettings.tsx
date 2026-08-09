@@ -36,7 +36,8 @@ import {
   Store, CreditCard, Bell, Truck, User, Save, CheckCircle,
 } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { DEFAULT_STORE_SETTINGS, StoreSettings, CURRENCIES } from '~/entities/storeOwnerData';
+import { DEFAULT_STORE_SETTINGS, StoreSettings } from '~/entities/settings';
+import { CURRENCIES } from '~/entities/currency';
 
 type Tab = 'store' | 'payment' | 'notifications' | 'shipping' | 'account';
 

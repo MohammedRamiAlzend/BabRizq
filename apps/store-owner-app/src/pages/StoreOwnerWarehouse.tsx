@@ -47,10 +47,11 @@ import {
   Plus, Pencil, Trash2, Search, X, ArrowUp, ArrowDown, RefreshCw,
 } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
+import { STORE_PRODUCTS, StoreProduct } from '~/entities/product';
 import {
-  STORE_PRODUCTS, STOCK_MOVEMENTS, STORE_SUPPLIERS,
-  StoreProduct, StockMovement, Supplier,
-} from '~/entities/storeOwnerData';
+  STOCK_MOVEMENTS, STORE_SUPPLIERS,
+  StockMovement, Supplier,
+} from '~/entities/warehouse';
 import { todayDate } from '@/shared/lib/utils';
 import { usePagination } from '@/shared/hooks/usePagination';
 import Pagination from '@/shared/ui/Pagination';

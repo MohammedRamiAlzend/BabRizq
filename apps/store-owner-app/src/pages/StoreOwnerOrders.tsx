@@ -29,7 +29,7 @@
 
 import { useState, useMemo } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_ORDERS, StoreOrder } from '~/entities/storeOwnerData';
+import { STORE_ORDERS, StoreOrder } from '~/entities/order';
 import { OrderStatusBadge } from '@/pages/StoreOwnerOverview';
 import { Package, Search, Printer, ChevronRight } from 'lucide-react';
 

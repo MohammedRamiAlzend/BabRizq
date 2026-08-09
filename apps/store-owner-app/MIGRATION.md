@@ -7,7 +7,7 @@
 | `src/pages/StoreOwnerLayout.tsx` | `src/pages/StoreOwnerLayout.tsx` | copied verbatim |
 | `src/pages/StoreOwnerOverview|Products|Orders|Sales|Categories|Offers|Reports|Chat|Settings|Warehouse|Accounting.tsx` | `src/pages/…` | copied verbatim |
 | `src/pages/LoginPage.tsx` | `src/pages/LoginPage.tsx` | **rewritten** — single-role |
-| `src/entities/storeOwnerData.ts` | `src/entities/storeOwnerData.ts` | interfaces `StoreProduct`, `StoreOrder`, `StoreCategory`, `Offer`, `ChatMessage`, `Supplier`, `StockMovement`, `Expense`, `Invoice`, `StoreSettings`, `CurrencyPrice` + mocks |
+| `src/entities/storeOwnerData.ts` | `src/entities/{product,category,order,offer,chat,warehouse,accounting,settings,sales,currency}/{model,api,index}` | **Phase 2** — split into per-domain FSD slices |
 | `src/shared/ui/StoreOwnerSidebar.tsx` | `src/shared/ui/StoreOwnerSidebar.tsx` | copied verbatim |
 | shared ui/contexts/hooks/lib + AppHeader/NavLink/OrderBadge/Pagination | `packages/shared/…` | shared via aliases |
 | `needed-endpoints-for-backend/store-owner/*` | `docs/needed-endpoints-from-backend/…` | generated at migration time |
@@ -43,8 +43,25 @@
 bun install && bun run typecheck && bun run build
 ```
 
-## 5. Future cleanup (Phase 2)
+## 5. Phase 2 cleanup (done) & remaining work
 
-- Split `storeOwnerData.ts` (the largest legacy file, ~640 lines) into per-domain slices:
-  `entities/product`, `entities/order`, `entities/warehouse`, `entities/accounting`, `entities/chat`.
-- Introduce a store-owner `settings` feature context; add Vitest/Playwright coverage.
+**Completed in `feat/store-owner-app-implementation`:**
+
+- **Entity slices** — `entities/storeOwnerData.ts` (~640 lines) split into ten FSD domain
+  slices, each with `model.ts` (interfaces) + `api.ts` (fetch-ready mock functions) + `index.ts`:
+  `product` (StoreProduct, CurrencyPrice, PriceEntry, CRUD), `category`, `order` (status
+  filtering + transitions), `offer`, `chat`, `warehouse` (Supplier, StockMovement),
+  `accounting` (Expense, Invoice), `settings`, `sales` (typed MonthlySalesPoint /
+  CurrencyRevenue), `currency` (reference list). Every api function carries a
+  `TODO(migration)` comment naming the backend endpoint it simulates.
+- **Strict TypeScript** — `strict: true` + `noImplicitAny: true` enabled; the app typechecks
+  clean.
+- **Unit tests** — Vitest (`bun test`) with per-slice API contract tests (products CRUD, order
+  status, invoice math invariant, warehouse product links, offers, settings, sales, chat,
+  categories, currencies).
+
+**Still open:**
+
+- Playwright smoke tests (login `1`/`1`, browse the store-owner pages).
+- Introduce `VITE_API_URL` + replace mock APIs with `fetch` when the backend lands (Phase 4).
+- A `settings` feature context is optional once real API state management is introduced.

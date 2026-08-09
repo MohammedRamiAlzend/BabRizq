@@ -28,7 +28,8 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, ShieldCheck, Store } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_CATEGORIES, STORE_PRODUCTS, StoreCategory } from '~/entities/storeOwnerData';
+import { STORE_CATEGORIES, StoreCategory } from '~/entities/category';
+import { STORE_PRODUCTS } from '~/entities/product';
 
 // ─── Platform-level categories (managed by the platform admin, read-only for store owners) ──
 

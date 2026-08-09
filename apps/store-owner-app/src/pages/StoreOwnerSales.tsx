@@ -26,7 +26,8 @@
 
 import { useState, useMemo } from 'react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { STORE_ORDERS, StoreOrder, CURRENCIES } from '~/entities/storeOwnerData';
+import { STORE_ORDERS, StoreOrder } from '~/entities/order';
+import { CURRENCIES } from '~/entities/currency';
 import { OrderStatusBadge } from '@/pages/StoreOwnerOverview';
 import { Download, Search } from 'lucide-react';
 import { usePagination } from '@/shared/hooks/usePagination';
