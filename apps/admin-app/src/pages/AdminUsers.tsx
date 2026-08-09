@@ -40,7 +40,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/shared/ui/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/ui/select';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { platformUsers, PlatformUser, roleLabels } from '~/entities/adminData';
+import { platformUsers, PlatformUser, roleLabels } from '~/entities/user';
 import { useToast } from '@/shared/hooks/use-toast';
 import { usePagination } from '@/shared/hooks/usePagination';
 import Pagination from '@/shared/ui/Pagination';

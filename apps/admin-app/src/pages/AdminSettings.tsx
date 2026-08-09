@@ -24,7 +24,7 @@ import { useState, type ElementType, type ReactNode } from 'react';
 import { Settings, Mail, DollarSign, AlertCircle, Save, CheckCircle } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useToast } from '@/shared/hooks/use-toast';
-import { PlatformSettings, DEFAULT_PLATFORM_SETTINGS } from '~/entities/adminData';
+import { PlatformSettings, DEFAULT_PLATFORM_SETTINGS } from '~/entities/settings';
 
 type Tab = 'general' | 'currency' | 'maintenance';
 

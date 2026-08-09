@@ -19,7 +19,7 @@
 import { Users, Store, DollarSign, Megaphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/ui/card';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { platformStats } from '~/entities/adminData';
+import { platformStats } from '~/entities/stats';
 
 const AdminOverview = () => {
   const { t } = useLocale();

@@ -1,13 +1,15 @@
-export interface PlatformUser {
-  id: string;
-  name: string;
-  nameAr: string;
-  email: string;
-  role: 'admin' | 'store_owner' | 'marketer' | 'back_office' | 'delivery' | 'customer';
-  status: 'active' | 'suspended';
-  joinedDate: string;
-}
+/**
+ * User entity — mock API (admin).
+ *
+ * Simulates the admin user endpoints from
+ * `docs/needed-endpoints-from-backend.md`:
+ * `GET/POST /api/admin/users` · `PUT /api/admin/users/{id}/role` ·
+ * `PUT /api/admin/users/{id}/status` · `DELETE /api/admin/users/{id}`.
+ * Seed data is copied verbatim from the legacy monolith.
+ */
+import { PlatformUser, PlatformUserRole } from './model';
 
+/** In-memory user registry. TODO(migration): replaced by `GET /api/admin/users`. */
 export const platformUsers: PlatformUser[] = [
   { id: '1', name: 'System Admin', nameAr: 'مدير النظام', email: 'admin@babrizq.com', role: 'admin', status: 'active', joinedDate: '2024-01-01' },
   { id: '2', name: 'Ahmed Al-Rashid', nameAr: 'أحمد الراشد', email: 'ahmed@store.com', role: 'store_owner', status: 'active', joinedDate: '2024-02-15' },
@@ -21,14 +23,8 @@ export const platformUsers: PlatformUser[] = [
   { id: '10', name: 'Nour Saleh', nameAr: 'نور صالح', email: 'nour@customer2.com', role: 'customer', status: 'active', joinedDate: '2024-07-01' },
 ];
 
-export const platformStats = {
-  totalUsers: 1248,
-  totalStores: 86,
-  platformRevenue: 245800,
-  activeMarketers: 134,
-};
-
-export const roleLabels: Record<string, { en: string; ar: string }> = {
+/** Bilingual display labels for every platform role. */
+export const roleLabels: Record<PlatformUserRole, { en: string; ar: string }> = {
   admin: { en: 'Admin', ar: 'مدير' },
   store_owner: { en: 'Store Owner', ar: 'صاحب متجر' },
   marketer: { en: 'Marketer', ar: 'مسوّق' },
@@ -37,27 +33,37 @@ export const roleLabels: Record<string, { en: string; ar: string }> = {
   customer: { en: 'Customer', ar: 'عميل' },
 };
 
-export interface PlatformSettings {
-  platformName: string;
-  supportEmail: string;
-  defaultCurrency: string;
-  commissionRate: number;
-  maintenanceMode: boolean;
+/** Simulates `GET /api/admin/users`. */
+export async function getUsers(): Promise<PlatformUser[]> {
+  return new Promise(resolve => setTimeout(() => resolve(platformUsers), 100));
 }
 
-export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
-  platformName: 'Bab Rizq',
-  supportEmail: 'support@babrizq.com',
-  defaultCurrency: 'SAR',
-  commissionRate: 5.5,
-  maintenanceMode: false,
-};
+/** Simulates `PUT /api/admin/users/{id}/role`. */
+export async function updateUserRole(id: string, role: PlatformUserRole): Promise<PlatformUser> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const user = platformUsers.find(u => u.id === id);
+      if (!user) {
+        reject(new Error('User not found'));
+        return;
+      }
+      user.role = role;
+      resolve(user);
+    }, 100)
+  );
+}
 
-
-
-
-
-
-
-
-
+/** Simulates `PUT /api/admin/users/{id}/status`. */
+export async function updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<PlatformUser> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const user = platformUsers.find(u => u.id === id);
+      if (!user) {
+        reject(new Error('User not found'));
+        return;
+      }
+      user.status = status;
+      resolve(user);
+    }, 100)
+  );
+}
