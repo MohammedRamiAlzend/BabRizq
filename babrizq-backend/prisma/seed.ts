@@ -14,8 +14,19 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { ChartOfAccountsService } from '../src/modules/accounting/application/chart-of-accounts.service';
+import { LedgerPostingService } from '../src/modules/accounting/application/ledger-posting.service';
+import { InvoicesService } from '../src/modules/accounting/application/invoices.service';
+import { PrismaService } from '../src/modules/prisma/prisma.service';
 
 const prisma = new PrismaClient();
+
+/** Accounting engine instances used to seed the demo ledger (DRY — the seed
+ *  posts through the same double-entry code paths the API uses). */
+const prismaService = new PrismaService();
+const chartOfAccounts = new ChartOfAccountsService(prismaService);
+const invoicesService = new InvoicesService(prismaService);
+const ledger = new LedgerPostingService(prismaService, chartOfAccounts, invoicesService);
 
 const DEMO_PASSWORD = 'Password123!';
 
@@ -714,6 +725,40 @@ async function main(): Promise<void> {
       status: 'pending',
     },
   });
+
+  // ---- Accounting demo (P1): chart of accounts + expenses posted through
+  // the real ledger engine, so the store-owner accounting screens show a
+  // live (and balanced) trial balance / P&L out of the box. ----
+  await chartOfAccounts.ensureChartOfAccounts(store.id);
+  for (const expense of [
+    { id: 'exp-seed-rent', category: 'rent', titleEn: 'Store Rent', titleAr: 'إيجار المستودع', amount: 3500 },
+    { id: 'exp-seed-salary', category: 'salary', titleEn: 'Staff Salaries', titleAr: 'رواتب الموظفين', amount: 8000 },
+  ]) {
+    await prisma.expense.upsert({
+      where: { id: expense.id },
+      update: {},
+      create: {
+        id: expense.id,
+        storeId: store.id,
+        titleEn: expense.titleEn,
+        titleAr: expense.titleAr,
+        category: expense.category,
+        amount: expense.amount,
+      },
+    });
+    // Idempotent — skips stores that already have the journal entry.
+    await ledger.postExpense(
+      {
+        id: expense.id,
+        storeId: store.id,
+        category: expense.category,
+        titleEn: expense.titleEn,
+        titleAr: expense.titleAr,
+        amount: expense.amount,
+      },
+      prisma,
+    );
+  }
 
   // ---- Admin sanity (user exists; platform settings singleton) ----
   await prisma.$disconnect();
