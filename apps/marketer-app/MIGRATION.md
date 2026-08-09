@@ -10,7 +10,7 @@
 | `src/pages/MarketerPerformance.tsx` | `src/pages/MarketerPerformance.tsx` | copied verbatim |
 | `src/pages/MarketerSettings.tsx` | `src/pages/MarketerSettings.tsx` | copied verbatim |
 | `src/pages/LoginPage.tsx` | `src/pages/LoginPage.tsx` | **rewritten** — single-role |
-| `src/entities/marketerData.ts` | `src/entities/marketerData.ts` | interfaces `AffiliateLink`, `AffiliateTarget` + mocks |
+| `src/entities/marketerData.ts` | `src/entities/affiliateLink/` | **Phase 2** — `model.ts` + `api.ts` + `index.ts` slice |
 | `src/shared/ui/MarketerSidebar.tsx` | `src/shared/ui/MarketerSidebar.tsx` | copied verbatim |
 | shared ui/contexts/hooks/lib + AppHeader/NavLink/Pagination | `packages/shared/…` | shared via aliases |
 | `needed-endpoints-for-backend/marketer/*` | `docs/needed-endpoints-from-backend/…` | generated at migration time |
@@ -35,10 +35,19 @@
 ## 4. Validation
 
 ```bash
-bun install && bun run typecheck && bun run build
+bun install && bun run typecheck && bun run test && bun run build
 ```
 
-## 5. Future cleanup (Phase 2)
+## 5. Phase 2 completed (entity layer cleanup)
 
-- Split `marketerData.ts` into `model.ts` + `api.ts`.
-- Add Vitest/Playwright coverage; introduce `VITE_API_URL` when the backend lands.
+Done on `feat/marketer-app-implementation`:
+
+- **Entity slice** — `entities/marketerData.ts` is gone, replaced by a single FSD domain slice,
+  `entities/affiliateLink/` (`model.ts` interfaces + `api.ts` fetch-ready mocks annotated with
+  the endpoint they simulate via `TODO(migration)` + `index.ts` barrel).
+- **Strict TypeScript** — `strict: true` + `noImplicitAny: true`; the app typechecks clean.
+- **Tests** — Vitest (`bun run test`): 1 file covering the affiliate-link API (4 tests).
+
+## 6. Future cleanup (Phase 3+)
+
+- Add Playwright e2e coverage; introduce `VITE_API_URL` when the backend lands.

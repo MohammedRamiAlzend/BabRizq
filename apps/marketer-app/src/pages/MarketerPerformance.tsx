@@ -19,7 +19,7 @@
  */
 
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { INITIAL_LINKS } from '~/entities/marketerData';
+import { INITIAL_LINKS } from '~/entities/affiliateLink';
 import { BarChart3, TrendingUp, MousePointerClick, ShoppingBag } from 'lucide-react';
 
 const MarketerPerformance = () => {
