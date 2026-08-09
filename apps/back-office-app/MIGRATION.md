@@ -7,10 +7,10 @@
 | `src/pages/BackOfficeLayout.tsx` | `src/pages/BackOfficeLayout.tsx` | copied verbatim |
 | `src/pages/BackOfficeOverview|Orders|ShipmentDetail|Drivers|Map|Notifications|Chat.tsx` | `src/pages/…` | copied verbatim |
 | `src/pages/LoginPage.tsx` | `src/pages/LoginPage.tsx` | **rewritten** — single-role |
-| `src/entities/fulfillmentData.ts` | `src/entities/fulfillmentData.ts` | `FullOrder`, `FullOrderStatus`, `MockDriver` + mocks |
-| `src/entities/backOfficeData.ts` | `src/entities/backOfficeData.ts` | notifications, chat conversations, `DriverLocation` |
-| `src/entities/storeOwnerData.ts` | `src/entities/storeOwnerData.ts` | only `STORE_PRODUCTS` is used (stock checks) |
-| `src/features/orders/model/ordersContext.tsx` | `src/features/orders/model/ordersContext.tsx` | copied verbatim |
+| `src/entities/fulfillmentData.ts` | `src/entities/order/` + `src/entities/driver/` | **Phase 2** — `FullOrder`/`FullOrderStatus` live in `packages/shared/src/lib/order.ts`; the slices re-export them |
+| `src/entities/backOfficeData.ts` | `src/entities/{notification,chat,map}/` | **Phase 2** — split into domain slices |
+| `src/entities/storeOwnerData.ts` | `src/entities/product/` | **Phase 2** — only `STORE_PRODUCTS` is used (stock checks) |
+| `src/features/orders/model/ordersContext.tsx` | `src/features/orders/model/ordersContext.tsx` | **Phase 2** — pure logic extracted to `orderModel.ts`; context is now a thin wrapper |
 | `src/shared/ui/BackOfficeSidebar.tsx` | `src/shared/ui/BackOfficeSidebar.tsx` | copied verbatim |
 | shared ui/contexts/hooks/lib + AppHeader/NavLink/OrderBadge/Pagination/ProofOfDeliveryModal | `packages/shared/…` | shared via aliases |
 | `needed-endpoints-for-backend/back-office/*` | `docs/needed-endpoints-from-backend/…` | generated at migration time |
@@ -40,12 +40,33 @@
 ## 4. Validation
 
 ```bash
-bun install && bun run typecheck && bun run build
+bun install && bun run typecheck && bun run test && bun run build
 ```
 
-## 5. Future cleanup (Phase 2)
+## 5. Phase 2 completed (entity layer cleanup)
 
-- Split `fulfillmentData.ts` into `entities/order` + `entities/driver`; split `backOfficeData.ts`
-  into notifications/chat/map slices.
+Done on `feat/back-office-app-implementation`:
+
+- **Entity slices** — the three legacy entity files are gone, replaced by six FSD domain slices,
+  each `model.ts` (interfaces) + `api.ts` (fetch-ready mocks annotated with the exact endpoint
+  they simulate via `TODO(migration)` comments) + `index.ts` (barrel):
+  `entities/{order, driver, notification, chat, map, product}`.
+- **Shared order contract** — `FullOrder` / `FullOrderStatus` moved to
+  `packages/shared/src/lib/order.ts` (single source of truth); the shared `OrderBadge` and
+  `ProofOfDeliveryModal` consume it directly and the back-office `order` slice re-exports it
+  (this also removed the shared→entities cross-layer imports that would have broken the
+  delivery app in its own Phase 2).
+- **Pure order model** — `features/orders/model/orderModel.ts` holds the immutable
+  `assignDriver` / `updateStatus` / `setProofOfDelivery` functions; `ordersContext.tsx` is a
+  thin stateful wrapper with the same public API.
+- **Strict TypeScript** — `strict: true` + `noImplicitAny: true`; the app typechecks clean.
+- **Tests** — Vitest (`bun run test`): 7 files covering the order/driver/notification/chat/map/
+  product APIs and the pure order model (25 tests).
+
+## 6. Future cleanup (Phase 3+)
+
 - Move the live map to a maps provider (see `REFACTOR_PLAN.md` §8 service notes).
-- Add Vitest/Playwright coverage; introduce `VITE_API_URL` when the backend lands.
+- `packages/shared/src/ui/AppHeader.tsx` still resolves the per-app auth feature
+  (`@/features/auth/…`) — works in every single-role app today; revisit if shared needs to
+  become fully app-agnostic.
+- Add Playwright e2e coverage; introduce `VITE_API_URL` when the backend lands.
