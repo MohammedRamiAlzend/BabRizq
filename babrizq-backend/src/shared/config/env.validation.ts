@@ -15,6 +15,12 @@ export enum Environment {
   Test = 'test',
 }
 
+export enum StorageDriver {
+  Local = 'local',
+  Azure = 'azure',
+  S3 = 's3',
+}
+
 export class EnvironmentVariables {
   @IsEnum(Environment)
   NODE_ENV: Environment = Environment.Development;
@@ -49,6 +55,58 @@ export class EnvironmentVariables {
 
   @IsString()
   JWT_REFRESH_EXPIRES_IN: string = '7d';
+
+  // --- Storage (local | azure | s3) ---
+  @IsEnum(StorageDriver)
+  STORAGE_DRIVER: StorageDriver = StorageDriver.Local;
+
+  @IsOptional()
+  @IsString()
+  STORAGE_PATH: string = './uploads';
+
+  // Azure Blob (used when STORAGE_DRIVER=azure)
+  @IsOptional()
+  @IsString()
+  AZURE_STORAGE_CONNECTION_STRING?: string;
+
+  @IsOptional()
+  @IsString()
+  AZURE_CONTAINER_NAME: string = 'babrizq';
+
+  // AWS S3 (used when STORAGE_DRIVER=s3)
+  @IsOptional()
+  @IsString()
+  AWS_S3_BUCKET?: string;
+
+  @IsOptional()
+  @IsString()
+  AWS_S3_REGION: string = 'me-south-1';
+
+  @IsOptional()
+  @IsString()
+  AWS_ACCESS_KEY_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  AWS_SECRET_ACCESS_KEY?: string;
+
+  // --- Google OAuth (login with Google) ---
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CALLBACK_URL: string = 'http://localhost:3000/api/v1/auth/google/callback';
+
+  /** Where the browser is redirected after a successful Google login. */
+  @IsOptional()
+  @IsString()
+  FRONTEND_REDIRECT_URL: string = 'http://localhost:5173/auth/google/callback';
 
   // --- Rate limiting ---
   @IsOptional()
