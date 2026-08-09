@@ -301,10 +301,15 @@ model Order {
   paymentMethod     String?
   notes             String?
   subtotal          Float
+  // Applied offer discount (SAR). Kept on the order for the ledger and for
+  // offer analytics; tax is computed on (subtotal - discount).
+  discount          Float     @default(0)
   deliveryFee       Float     @default(0)
   tax               Float     @default(0)
   total             Float
   currency          String    @default("SAR")
+  // The offer that was applied at checkout (null when none applied).
+  offerId           String?
   proofOfDeliveryUrl String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -312,11 +317,13 @@ model Order {
   customer      User?       @relation(fields: [customerUserId], references: [id], onDelete: SetNull)
   store         Store       @relation(fields: [storeId], references: [id])
   driver        User?       @relation("AssignedDriver", fields: [assignedDriverId], references: [id], onDelete: SetNull)
+  offer         Offer?      @relation(fields: [offerId], references: [id], onDelete: SetNull)
   items         OrderItem[]
   invoice       Invoice?
   notifications Notification[]
 
   @@index([storeId])
+  @@index([offerId])
   @@index([customerUserId])
   @@index([assignedDriverId])
   @@index([status])
@@ -348,16 +355,20 @@ model Offer {
   productId     String?
   titleEn       String
   titleAr       String
-  // discountType ∈ percentage | fixed
+  // discountType ∈ percent | fixed
   discountType  String
   discountValue Float
   validFrom     DateTime?
   validTo       DateTime?
   // status ∈ active | expired | paused
   status        String  @default("active")
+  // Incremented at checkout whenever this offer is applied to an order.
+  redemptionCount Int   @default(0)
+  createdAt     DateTime @default(now())
 
   store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  orders  Order[]
 
   @@index([storeId])
   @@index([status])
