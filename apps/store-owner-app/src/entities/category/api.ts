@@ -6,6 +6,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { StoreCategory } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory categories. TODO(migration): replaced by `GET /api/store-owner/categories`. */
 export const STORE_CATEGORIES: StoreCategory[] = [
@@ -17,24 +18,43 @@ export const STORE_CATEGORIES: StoreCategory[] = [
   { id: 'cat6', nameEn: 'Fashion', nameAr: 'أزياء', iconOrEmoji: '👗', productsCount: 1 },
 ];
 
-/** Simulates `GET /api/store-owner/categories`. */
-export async function getStoreCategories(): Promise<StoreCategory[]> {
-  return new Promise(resolve => setTimeout(() => resolve(STORE_CATEGORIES), 100));
+/** Backend `StoreCategoryView` shape (store `categories.md`) — DTO boundary. */
+interface StoreCategoryDto {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  iconOrEmoji: string;
+  productsCount: number;
 }
 
-/** Simulates `POST /api/store-owner/categories`. */
+/** Maps the backend view onto the frontend `StoreCategory` model. */
+function toStoreCategory(dto: StoreCategoryDto): StoreCategory {
+  return {
+    id: dto.id,
+    nameEn: dto.nameEn,
+    nameAr: dto.nameAr,
+    iconOrEmoji: dto.iconOrEmoji,
+    productsCount: dto.productsCount,
+  };
+}
+
+/** GET /store/categories — the store owner's categories (X-Store-Id scoped). */
+export async function getStoreCategories(): Promise<StoreCategory[]> {
+  const data = await api.get<StoreCategoryDto[] | { items: StoreCategoryDto[] }>('/store/categories', {
+    page: 1,
+    pageSize: 100,
+  });
+  return unwrapList(data).map(toStoreCategory);
+}
+
+/** POST /store/categories — create a category for the authenticated store. */
 export async function createStoreCategory(
   input: Omit<StoreCategory, 'id' | 'productsCount'>
 ): Promise<StoreCategory> {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      const category: StoreCategory = {
-        ...input,
-        id: `cat${STORE_CATEGORIES.length + 1}`,
-        productsCount: 0,
-      };
-      STORE_CATEGORIES.push(category);
-      resolve(category);
-    }, 100)
-  );
+  const dto = await api.post<StoreCategoryDto>('/store/categories', {
+    nameEn: input.nameEn,
+    nameAr: input.nameAr,
+    emoji: input.iconOrEmoji,
+  });
+  return toStoreCategory(dto);
 }
