@@ -23,10 +23,21 @@ Demo login: username **1** / password **1** (single-role app — no role picker)
 
 Standard Bab Rizq role-app template (see `REFACTOR_PLAN.md`): `app/` (providers+routing),
 `pages/` (Overview, Products, Orders, Sales, Categories, Offers, Reports, Chat, Warehouse,
-Accounting, Settings), `features/auth`, `entities/storeOwnerData` (StoreProduct, StoreOrder,
-Offer, Invoice… interfaces + mocks), `shared/` (StoreOwnerSidebar).
+Accounting, Settings), `features/auth`, `shared/` (StoreOwnerSidebar).
+
+**Entities** are split into per-domain FSD slices — `product`, `category`, `order`, `offer`,
+`chat`, `warehouse`, `accounting`, `settings`, `sales`, `currency` — each with `model.ts`
+(interfaces) + `api.ts` (mock data + fetch-ready functions) + `index.ts` (barrel). Every api
+function is annotated with the backend endpoint it simulates, so swapping mocks for `fetch`
+later is a 1:1 change.
 
 Generic UI lives in `packages/shared` and is imported via path aliases — never edit copies here.
+
+## Tests
+
+```bash
+bun test          # Vitest — entity API contracts (products, orders, accounting, warehouse, …)
+```
 
 ## Docs
 
