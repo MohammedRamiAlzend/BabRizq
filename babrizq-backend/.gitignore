@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Prisma (SQLite dev database + generated artifacts)
+prisma/*.db
+prisma/*.db-journal
+prisma/dev.db
+!prisma/seed.ts
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test coverage / logs
+coverage/
+*.log
+
+# Uploads (local storage driver)
+uploads/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

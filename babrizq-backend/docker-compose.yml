@@ -1,0 +1,45 @@
+# ------------------------------------------------------------------
+# Bab Rizq backend — local development stack
+#
+#   docker compose up --build
+#
+# SQLite is the default dev database (zero-config). To use Postgres +
+# Redis (cache/queues), uncomment the services below and set:
+#   DATABASE_URL=postgresql://babrizq:babrizq@postgres:5432/babrizq
+# ------------------------------------------------------------------
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: file:./dev.db
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+    volumes:
+      - ./prisma:/app/prisma # persist the SQLite file inside the container
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: babrizq
+  #     POSTGRES_PASSWORD: babrizq
+  #     POSTGRES_DB: babrizq
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+
+# volumes:
+#   pgdata:
