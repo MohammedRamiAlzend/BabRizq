@@ -17,6 +17,7 @@ import { AffiliateLink } from '@prisma/client';
 import { ApiError } from '../../../shared/common/errors/api-error';
 import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 import {
   AffiliateLinkView,
   AffiliateTargetView,
@@ -58,7 +59,10 @@ const startOfDay = (date: Date): Date => {
 
 @Injectable()
 export class MarketerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** GET /marketer/links — paginated, filterable by type (all|store|product). */
   async listLinks(
@@ -274,6 +278,15 @@ export class MarketerService {
         bankIban: dto.bankIban ?? null,
         walletId: dto.walletId ?? null,
       },
+    });
+
+    // Acknowledge the request so the marketer knows the money is moving.
+    await this.notifications.create(userId, {
+      type: 'payout',
+      titleEn: 'Withdrawal requested',
+      titleAr: 'طلب سحب',
+      bodyEn: `Your withdrawal of ${round2(dto.amount)} SAR is being processed (est. ${request.estimatedDays} days).`,
+      bodyAr: `طلب السحب بمبلغ ${round2(dto.amount)} ريال قيد المعالجة (متوقع ${request.estimatedDays} يوم).`,
     });
     return {
       requestId: request.id,

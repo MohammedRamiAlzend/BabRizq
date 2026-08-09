@@ -4,6 +4,7 @@
  */
 import { StoreOrdersService } from './store-orders.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 
 const prisma = {
   store: { findUnique: jest.fn() },
@@ -15,7 +16,11 @@ const prisma = {
   },
 } as unknown as PrismaService;
 
-const service = new StoreOrdersService(prisma);
+const notifications = {
+  create: jest.fn().mockResolvedValue(undefined),
+} as unknown as NotificationsService;
+
+const service = new StoreOrdersService(prisma, notifications);
 
 const ownedStore = { id: 'store-techzone', ownerUserId: 'owner-1' };
 

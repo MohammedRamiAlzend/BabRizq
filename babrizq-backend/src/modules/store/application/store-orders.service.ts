@@ -12,12 +12,16 @@ import { ApiError } from '../../../shared/common/errors/api-error';
 import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { assertForwardTransition, isOrderStatus } from '../../../shared/common/orders/order-status';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 import { StoreOrderView, toStoreOrderView } from './store.mapper';
 import { resolveOwnedStore } from './store-context';
 
 @Injectable()
 export class StoreOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** GET /store/orders — paginated order list (search + status filter). */
   async listOrders(
@@ -87,6 +91,18 @@ export class StoreOrdersService {
       data: { status: nextStatus },
       include: { items: true },
     });
+
+    // Keep the customer in the loop when the store moves the order forward.
+    if (updated.customerUserId) {
+      await this.notifications.create(updated.customerUserId, {
+        type: 'order_status',
+        titleEn: 'Order status updated',
+        titleAr: 'تحديث حالة الطلب',
+        bodyEn: `Order ${updated.orderNumber} is now ${nextStatus.replace('_', ' ')}.`,
+        bodyAr: `أصبحت حالة الطلب ${updated.orderNumber}: ${nextStatus.replace('_', ' ')}.`,
+        orderId: updated.id,
+      });
+    }
     return toStoreOrderView(updated);
   }
 }

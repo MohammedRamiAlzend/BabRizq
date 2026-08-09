@@ -270,6 +270,39 @@ async function main(): Promise<void> {
     data: [{ productId: 'prod-smartwatch', value: 'wearable' }],
   });
 
+  // ---- Offers for the TechZone demo store ----
+  // A store-wide 10% and a fixed 50 SAR on headphones give the store-owner
+  // offers UI and the checkout discount flow live data to exercise.
+  await prisma.offer.upsert({
+    where: { id: 'offer-techzone-wide' },
+    update: {},
+    create: {
+      id: 'offer-techzone-wide',
+      storeId: store.id,
+      titleEn: 'TechZone Storewide -10%',
+      titleAr: 'تخفيض 10% على كل المنتجات',
+      discountType: 'percent',
+      discountValue: 10,
+      status: 'active',
+    },
+  });
+
+  await prisma.offer.upsert({
+    where: { id: 'offer-headphones-fixed' },
+    update: {},
+    create: {
+      id: 'offer-headphones-fixed',
+      storeId: store.id,
+      productId: 'prod-headphones',
+      titleEn: 'Headphones -50 SAR',
+      titleAr: 'خصم 50 ريال على السماعات',
+      discountType: 'fixed',
+      discountValue: 50,
+      validFrom: new Date(),
+      status: 'active',
+    },
+  });
+
   // ---- Second store: Leather House (Fashion) + products ----
   const leatherStore = await prisma.store.upsert({
     where: { id: 'store-leather-house' },

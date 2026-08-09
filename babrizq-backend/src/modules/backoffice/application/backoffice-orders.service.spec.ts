@@ -4,6 +4,7 @@
  */
 import { BackofficeOrdersService } from './backoffice-orders.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 
 const prisma = {
   order: {
@@ -14,11 +15,14 @@ const prisma = {
   },
   user: { findUnique: jest.fn(), update: jest.fn() },
   product: { findMany: jest.fn() },
-  notification: { create: jest.fn() },
   $transaction: jest.fn(),
 } as unknown as PrismaService;
 
-const service = new BackofficeOrdersService(prisma);
+const notifications = {
+  create: jest.fn().mockResolvedValue(undefined),
+} as unknown as NotificationsService;
+
+const service = new BackofficeOrdersService(prisma, notifications);
 
 const orderRow = (status: string) => ({
   id: 'order-1',
@@ -58,7 +62,6 @@ describe('BackofficeOrdersService.assignDriver', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(driverRow(true));
     (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn(prisma));
     (prisma.user.update as jest.Mock).mockResolvedValue(driverRow(false));
-    (prisma.notification.create as jest.Mock).mockResolvedValue({});
     (prisma.order.update as jest.Mock).mockResolvedValue(
       orderRow('assigned'),
     );
@@ -76,14 +79,10 @@ describe('BackofficeOrdersService.assignDriver', () => {
         }),
       }),
     );
-    expect(prisma.notification.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          recipientUserId: 'driver-1',
-          type: 'driver_update',
-          orderId: 'order-1',
-        }),
-      }),
+    expect(notifications.create).toHaveBeenCalledWith(
+      'driver-1',
+      expect.objectContaining({ type: 'driver_update', orderId: 'order-1' }),
+      expect.anything(), // tx
     );
   });
 

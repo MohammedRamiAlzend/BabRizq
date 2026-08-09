@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { ApiError } from '../../../shared/common/errors/api-error';
 import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 import { FullOrderView, toFullOrderView } from './backoffice.mapper';
 
 const ORDER_INCLUDE = {
@@ -25,7 +26,10 @@ const ASSIGNABLE_STATUSES = ['pending', 'processing'];
 
 @Injectable()
 export class BackofficeOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** GET /backoffice/orders — paginated, searchable, status-filterable. */
   async listOrders(query: {
@@ -125,10 +129,10 @@ export class BackofficeOrdersService {
           },
         },
       });
-      // Fire a notification the delivery app surfaces to the driver.
-      await tx.notification.create({
-        data: {
-          recipientUserId: driverId,
+      // Notify the driver (delivery app) and the customer, atomically.
+      await this.notifications.create(
+        driverId,
+        {
           type: 'driver_update',
           titleEn: 'New delivery assigned',
           titleAr: 'تسليم جديد',
@@ -136,7 +140,22 @@ export class BackofficeOrdersService {
           bodyAr: `تم تعيين الطلب ${order.orderNumber} إليك.`,
           orderId: order.id,
         },
-      });
+        tx,
+      );
+      if (order.customerUserId) {
+        await this.notifications.create(
+          order.customerUserId,
+          {
+            type: 'order_status',
+            titleEn: 'Driver assigned',
+            titleAr: 'تم تعيين السائق',
+            bodyEn: `A driver has been assigned to order ${order.orderNumber}.`,
+            bodyAr: `تم تعيين سائق للطلب ${order.orderNumber}.`,
+            orderId: order.id,
+          },
+          tx,
+        );
+      }
       return tx.order.update({
         where: { id: orderId },
         data: { status: 'assigned', assignedDriverId: driverId },
