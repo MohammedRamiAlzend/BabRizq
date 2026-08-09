@@ -7,7 +7,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AppConfig } from '../../../shared/config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../../shared/common/types/authenticated-user';
@@ -46,7 +46,13 @@ export class TokenService {
   async createRefreshToken(userId: string): Promise<string> {
     const expiresIn = this.config.get('jwt.refreshExpiresIn', { infer: true });
     const raw = await this.jwtService.signAsync(
-      { sub: userId },
+      {
+        sub: userId,
+        // HS256 JWTs are deterministic for identical payloads; the random
+        // `jti` guarantees every refresh token (and thus its stored hash) is
+        // unique even for two logins within the same second.
+        jti: randomUUID(),
+      },
       {
         secret: this.config.get('jwt.refreshSecret', { infer: true }),
         expiresIn: expiresIn as JwtSignOptions['expiresIn'],
