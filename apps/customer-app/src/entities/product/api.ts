@@ -11,6 +11,7 @@
  * content here without updating the UI consumers.
  */
 import { Product } from './model';
+import { api, ApiError, unwrapList } from '@/shared/lib/api';
 import headphonesImg from '@/assets/products/headphones.jpg';
 import bagImg from '@/assets/products/bag.jpg';
 import watchImg from '@/assets/products/watch.jpg';
@@ -376,72 +377,103 @@ export const MOCK_PRODUCTS: Product[] = [
   },
 ];
 
-/** Simulates `GET /api/products?page=&pageSize=&category=&store=&search=`. */
+/** Backend `ProductView` shape (customer `_shared.md`) — DTO boundary. */
+interface ProductDto {
+  id: string;
+  nameEn: string;
+  nameAr: string;
+  price: number;
+  originalPrice?: number;
+  descriptionEn: string;
+  descriptionAr: string;
+  storeId: string;
+  storeNameEn: string;
+  storeNameAr: string;
+  imageUrl: string;
+  categoryEn: string;
+  categoryAr: string;
+  storeCategoryId?: string;
+  tags: string[];
+  rating: number;
+  reviewCount: number;
+  isNew?: boolean;
+  isFeatured?: boolean;
+}
+
+/** Maps the backend view onto the frontend `Product` model (imageUrl → image). */
+function toProduct(dto: ProductDto): Product {
+  return {
+    id: dto.id,
+    nameEn: dto.nameEn,
+    nameAr: dto.nameAr,
+    price: dto.price,
+    originalPrice: dto.originalPrice,
+    descriptionEn: dto.descriptionEn,
+    descriptionAr: dto.descriptionAr,
+    storeId: dto.storeId,
+    storeNameEn: dto.storeNameEn,
+    storeNameAr: dto.storeNameAr,
+    image: dto.imageUrl,
+    categoryEn: dto.categoryEn,
+    categoryAr: dto.categoryAr,
+    storeCategoryId: dto.storeCategoryId ?? '',
+    tags: dto.tags,
+    rating: dto.rating,
+    reviewCount: dto.reviewCount,
+    isNew: dto.isNew,
+    isFeatured: dto.isFeatured,
+  };
+}
+
+/** Default pagination for catalogue reads. */
+const PAGE = { page: 1, pageSize: 100 };
+
+/** GET /storefront/products — paginated, filterable catalogue. */
 export async function getProducts(): Promise<Product[]> {
-  return new Promise(resolve => setTimeout(() => resolve(MOCK_PRODUCTS), 100));
+  const data = await api.get<ProductDto[] | { items: ProductDto[] }>('/storefront/products', PAGE);
+  return unwrapList(data).map(toProduct);
 }
 
-/** Simulates `GET /api/products/{id}`. */
+/** GET /storefront/products/:id — single product detail (404 → null). */
 export async function getProductById(id: string): Promise<Product | null> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(MOCK_PRODUCTS.find(p => p.id === id) || null), 100)
-  );
+  try {
+    const dto = await api.get<ProductDto>(`/storefront/products/${id}`);
+    return toProduct(dto);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
-/** Simulates `GET /api/stores/{storeId}/products`. */
+/** GET /storefront/stores/:storeId/products — a store's catalogue. */
 export async function getProductsByStore(storeId: string): Promise<Product[]> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(MOCK_PRODUCTS.filter(p => p.storeId === storeId)), 100)
+  const data = await api.get<ProductDto[] | { items: ProductDto[] }>(
+    `/storefront/stores/${storeId}/products`,
+    PAGE
   );
+  return unwrapList(data).map(toProduct);
 }
 
-/** Simulates `GET /api/products?category={categoryEn}`. */
+/** GET /storefront/categories/:categoryEn — the category catalog's products. */
 export async function getProductsByCategory(categoryEn: string): Promise<Product[]> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(MOCK_PRODUCTS.filter(p => p.categoryEn === categoryEn)), 100)
-  );
+  const catalog = await api.get<{ items: ProductDto[] }>(`/storefront/categories/${categoryEn}`, PAGE);
+  return unwrapList(catalog.items).map(toProduct);
 }
 
-/**
- * Simulates `GET /api/products?search={query}`.
- * Matches against English/Arabic names, tags and platform category.
- */
+/** GET /storefront/products?search= — full-text search on nameEn/nameAr. */
 export async function searchProducts(query: string): Promise<Product[]> {
-  const q = query.trim().toLowerCase();
-  return new Promise(resolve =>
-    setTimeout(
-      () =>
-        resolve(
-          q
-            ? MOCK_PRODUCTS.filter(
-                p =>
-                  p.nameEn.toLowerCase().includes(q) ||
-                  p.nameAr.includes(query.trim()) ||
-                  p.tags.some(tag => tag.toLowerCase().includes(q)) ||
-                  p.categoryEn.toLowerCase().includes(q)
-              )
-            : MOCK_PRODUCTS
-        ),
-      100
-    )
-  );
+  const data = await api.get<ProductDto[] | { items: ProductDto[] }>('/storefront/products', {
+    ...PAGE,
+    search: query.trim() || undefined,
+  });
+  return unwrapList(data).map(toProduct);
 }
 
-/**
- * Simulates `GET /api/products/recommended`.
- * Personalised suggestions: products in categories the user has shown interest
- * in first, then any featured product — deduplicated, max 6 results.
- */
+/** GET /storefront/recommendations?categories= — interest-based suggestions. */
 export async function getRecommendedProducts(interests: string[] = []): Promise<Product[]> {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      const interestSet = new Set(interests);
-      const ranked = [...MOCK_PRODUCTS].sort((a, b) => {
-        const aHit = interestSet.has(a.categoryEn) ? 1 : 0;
-        const bHit = interestSet.has(b.categoryEn) ? 1 : 0;
-        return bHit - aHit || (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
-      });
-      resolve(ranked.slice(0, 6));
-    }, 100)
-  );
+  const data = await api.get<{ products: ProductDto[] }>('/storefront/recommendations', {
+    categories: interests.length > 0 ? interests : undefined,
+    limit: 6,
+  });
+  return (data.products ?? []).map(toProduct);
 }

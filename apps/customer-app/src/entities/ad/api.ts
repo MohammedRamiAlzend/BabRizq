@@ -7,6 +7,7 @@
  * verbatim from the legacy monolith.
  */
 import { Ad } from './model';
+import { api } from '@/shared/lib/api';
 
 /** Home page carousel ads. TODO(migration): replaced by `GET /api/home/ads`. */
 export const MOCK_ADS: Ad[] = [
@@ -436,21 +437,43 @@ export const CATEGORY_ADS: Record<string, Ad[]> = {
   ],
 };
 
-/** Simulates `GET /api/home/ads`. */
+/** Backend `AdView` shape (customer `_shared.md`) — DTO boundary. */
+interface AdDto {
+  id: string;
+  titleEn: string;
+  titleAr: string;
+  subtitleEn: string;
+  subtitleAr: string;
+  ctaEn: string;
+  ctaAr: string;
+  emoji: string;
+  gradient: string;
+  linkType?: 'category' | 'store';
+  linkValue?: string;
+}
+
+/** The backend view already matches the frontend `Ad` model field-for-field. */
+const toAd = (dto: AdDto): Ad => dto;
+
+/** Normalises `{ ads: [...] }` and raw-array responses. */
+function unwrapAds(data: AdDto[] | { ads: AdDto[] }): AdDto[] {
+  return Array.isArray(data) ? data : data.ads;
+}
+
+/** GET /storefront/ads — the homepage promotional carousel. */
 export async function getHomeAds(): Promise<Ad[]> {
-  return new Promise(resolve => setTimeout(() => resolve(MOCK_ADS), 100));
+  const data = await api.get<AdDto[] | { ads: AdDto[] }>('/storefront/ads');
+  return unwrapAds(data).map(toAd);
 }
 
-/** Simulates `GET /api/stores/{storeId}/ads`. */
+/** GET /storefront/stores/:storeId/ads — store-specific carousel. */
 export async function getStoreAds(storeId: string): Promise<Ad[]> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(STORE_ADS[storeId] ?? []), 100)
-  );
+  const data = await api.get<AdDto[] | { ads: AdDto[] }>(`/storefront/stores/${storeId}/ads`);
+  return unwrapAds(data).map(toAd);
 }
 
-/** Simulates `GET /api/categories/{categoryEn}/ads`. */
+/** GET /storefront/categories/:categoryEn/ads — category-specific carousel. */
 export async function getCategoryAds(categoryEn: string): Promise<Ad[]> {
-  return new Promise(resolve =>
-    setTimeout(() => resolve(CATEGORY_ADS[categoryEn] ?? []), 100)
-  );
+  const data = await api.get<AdDto[] | { ads: AdDto[] }>(`/storefront/categories/${categoryEn}/ads`);
+  return unwrapAds(data).map(toAd);
 }
