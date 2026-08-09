@@ -16,6 +16,7 @@ import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/application/notifications.service';
 import { OffersService } from '../../offers/application/offers.service';
+import { LedgerPostingService } from '../../accounting/application/ledger-posting.service';
 import { OrderNumberService } from './order-number.service';
 import { CreateOrderDto } from '../presentation/dto/orders.dto';
 
@@ -82,6 +83,7 @@ export class OrdersService {
     private readonly orderNumbers: OrderNumberService,
     private readonly notifications: NotificationsService,
     private readonly offers: OffersService,
+    private readonly ledger: LedgerPostingService,
   ) {}
 
   /** POST /customer/orders — place an order from the current cart. */
@@ -199,6 +201,27 @@ export class OrdersService {
           data: { redemptionCount: { increment: 1 } },
         });
       }
+
+      // Book the order in the ledger + issue the tax invoice — atomically
+      // with the order itself, so the books can never miss an order.
+      await this.ledger.postOrder(
+        {
+          id: created.id,
+          storeId,
+          orderNumber,
+          paymentMethod: created.paymentMethod,
+          subtotal,
+          discount,
+          deliveryFee,
+          tax,
+          total,
+          items: created.items.map((item) => ({
+            qty: item.qty,
+            price: item.price,
+          })),
+        },
+        tx,
+      );
 
       // Notify the store owner; flag products that dropped below the
       // low-stock threshold so they can restock before the order ships.
