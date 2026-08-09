@@ -57,6 +57,7 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth()
     .addTag('Auth')
     .addTag('Health')
+    .addTag('Files')
     .build();
   const document = SwaggerModule.createDocument(app, documentConfig);
   SwaggerModule.setup('docs', app, document);

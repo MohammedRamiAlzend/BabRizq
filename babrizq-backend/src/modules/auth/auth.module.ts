@@ -11,6 +11,7 @@ import { TokenService } from './application/token.service';
 import { JwtStrategy } from './infrastructure/jwt.strategy';
 import { UserRepository } from './infrastructure/user.repository';
 import { RefreshTokenRepository } from './infrastructure/refresh-token.repository';
+import { GoogleAuthService } from './infrastructure/google-auth.service';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RefreshTokenRepository } from './infrastructure/refresh-token.repositor
     JwtStrategy,
     UserRepository,
     RefreshTokenRepository,
+    GoogleAuthService,
   ],
   exports: [AuthService],
 })

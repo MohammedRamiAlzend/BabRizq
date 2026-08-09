@@ -12,15 +12,21 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApiResponse } from './api-response';
+import { SKIP_API_RESPONSE_KEY } from '../decorators/skip-api-response.decorator';
 
 @Injectable()
 export class ApiResponseInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
+  implements NestInterceptor<T, ApiResponse<T> | T>
 {
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler<T>,
-  ): Observable<ApiResponse<T>> {
+  ): Observable<ApiResponse<T> | T> {
+    // Routes marked @SkipApiResponse() (e.g. OAuth redirects) pass through raw.
+    const skip = Reflect.getMetadata(SKIP_API_RESPONSE_KEY, context.getHandler());
+    if (skip) {
+      return next.handle();
+    }
     return next.handle().pipe(
       map((data) => ({
         isSuccess: true,
