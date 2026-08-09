@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "useDefineForClassFields": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": false,
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@/shared/ui/ui/*": ["../../packages/shared/src/ui/ui/*"],
+      "@/shared/contexts/*": ["../../packages/shared/src/contexts/*"],
+      "@/shared/hooks/*": ["../../packages/shared/src/hooks/*"],
+      "@/shared/lib/*": ["../../packages/shared/src/lib/*"],
+      "@/shared/ui/AppHeader": ["../../packages/shared/src/ui/AppHeader"],
+      "@/shared/ui/NavLink": ["../../packages/shared/src/ui/NavLink"],
+      "@/shared/ui/OrderBadge": ["../../packages/shared/src/ui/OrderBadge"],
+      "@/shared/ui/Pagination": ["../../packages/shared/src/ui/Pagination"],
+      "@/shared/ui/ScrollToTopButton": ["../../packages/shared/src/ui/ScrollToTopButton"],
+      "@/shared/ui/ProofOfDeliveryModal": ["../../packages/shared/src/ui/ProofOfDeliveryModal"],
+      "@/shared/*": ["./src/shared/*"],
+      "~/entities/*": ["./src/entities/*"],
+      "@/features/*": ["./src/features/*"],
+      "@/pages/*": ["./src/pages/*"],
+      "~/processes/*": ["./src/processes/*"],
+      "~/app/*": ["./src/app/*"],
+      "@/assets/*": ["./src/assets/*"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
