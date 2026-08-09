@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/modules/prisma/prisma.service';
 
 describe('App (e2e)', () => {
   let app: INestApplication;
@@ -502,5 +503,233 @@ describe('Marketer + Admin (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(400);
     expect(res.body.topError.code).toBe('CANNOT_DELETE_SELF');
+  });
+});
+
+describe('Notifications + Offers (e2e)', () => {
+  let app: INestApplication;
+  let customerTkn: string;
+  let storeTkn: string;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('/api/v1');
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+    customerTkn = await roleToken(app, 'customer@babrizq.com');
+    storeTkn = await roleToken(app, 'store@babrizq.com');
+    prisma = app.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('notifications: list is own-only and the read flow works', async () => {
+    const customer = await prisma.user.findUniqueOrThrow({
+      where: { email: 'customer@babrizq.com' },
+    });
+    const created = await prisma.notification.create({
+      data: {
+        recipientUserId: customer.id,
+        type: 'order_status',
+        titleEn: 'Status update',
+        titleAr: 'تحديث الحالة',
+        bodyEn: 'Your order is being prepared',
+        bodyAr: 'طلبك قيد التحضير',
+      },
+    });
+
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    expect(
+      list.body.value.items.some((n: { id: string }) => n.id === created.id),
+    ).toBe(true);
+
+    // A different user never sees someone else's notification.
+    const other = await request(app.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .expect(200);
+    expect(
+      other.body.value.items.some((n: { id: string }) => n.id === created.id),
+    ).toBe(false);
+
+    const unread = await request(app.getHttpServer())
+      .get('/api/v1/notifications/unread-count')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    expect(unread.body.value.unreadCount).toBeGreaterThanOrEqual(1);
+
+    const read = await request(app.getHttpServer())
+      .post(`/api/v1/notifications/${created.id}/read`)
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    expect(read.body.value.isRead).toBe(true);
+
+    // A fresh unread row makes read-all report at least one update.
+    await prisma.notification.create({
+      data: {
+        recipientUserId: customer.id,
+        type: 'payout',
+        titleEn: 'Payout ready',
+        titleAr: 'سحب جاهز',
+        bodyEn: 'Your withdrawal was processed',
+        bodyAr: 'تمت معالجة طلب السحب',
+      },
+    });
+    const all = await request(app.getHttpServer())
+      .post('/api/v1/notifications/read-all')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    expect(all.body.value.updated).toBeGreaterThanOrEqual(1);
+  });
+
+  it('notifications: event wiring — placing an order notifies the store owner', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/v1/customer/cart')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/customer/cart/items')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ productId: 'prod-smartwatch' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put('/api/v1/customer/cart/items/prod-smartwatch')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ quantity: 1 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/customer/orders')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({
+        fullName: 'Sara Mansour',
+        phone: '+966 50 000 0005',
+        deliveryAddress: '45 King Fahd Rd, Riyadh',
+        paymentMethod: 'cash',
+      })
+      .expect(201);
+
+    const storeOwner = await prisma.user.findUniqueOrThrow({
+      where: { email: 'store@babrizq.com' },
+    });
+    const storeNotifs = await prisma.notification.findMany({
+      where: { recipientUserId: storeOwner.id, type: 'new_order' },
+    });
+    expect(storeNotifs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('offers: seeded offers listed, cross-role access rejected', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/store/offers')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(res.body.value.totalItems).toBeGreaterThanOrEqual(2);
+    expect(res.body.value.items[0]).toEqual(
+      expect.objectContaining({
+        nameEn: expect.any(String),
+        discountType: expect.stringMatching(/^(percent|fixed)$/),
+        isActive: expect.any(Boolean),
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .get('/api/v1/store/offers')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(403);
+  });
+
+  it('offers: create → pause → stats', async () => {
+    const products = await request(app.getHttpServer())
+      .get('/api/v1/store/products')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    const productId = products.body.value.items[0].id as string;
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/store/offers')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({
+        nameEn: 'E2E Product Offer',
+        nameAr: 'عرض تجريبي',
+        productId,
+        discountType: 'percent',
+        discountValue: 20,
+      })
+      .expect(201);
+    expect(created.body.value.type).toBe('product');
+
+    const paused = await request(app.getHttpServer())
+      .post(`/api/v1/store/offers/${created.body.value.id}/pause`)
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(paused.body.value.isActive).toBe(false);
+
+    const stats = await request(app.getHttpServer())
+      .get(`/api/v1/store/offers/${created.body.value.id}/stats`)
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(stats.body.value.totalOrders).toBe(0);
+  });
+
+  it('checkout applies the best offer and tracks the redemption', async () => {
+    const settings = await prisma.storeSettings.findUnique({
+      where: { storeId: 'store-techzone' },
+    });
+    const deliveryFee = settings?.deliveryFee ?? 0;
+    const taxRate = settings?.taxRate ?? 0;
+
+    await request(app.getHttpServer())
+      .delete('/api/v1/customer/cart')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/customer/cart/items')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ productId: 'prod-headphones' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put('/api/v1/customer/cart/items/prod-headphones')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ quantity: 2 })
+      .expect(200);
+
+    const placed = await request(app.getHttpServer())
+      .post('/api/v1/customer/orders')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({
+        fullName: 'Sara Mansour',
+        phone: '+966 50 000 0005',
+        deliveryAddress: '45 King Fahd Rd, Riyadh',
+        paymentMethod: 'cash',
+      })
+      .expect(201);
+
+    // 2 × 299 = 598; store-wide 10% (59.8) beats the fixed 50 SAR headphones
+    // offer, and tax applies to the discounted subtotal.
+    const discount = 59.8;
+    const taxable = Math.round((598 - discount) * 100) / 100;
+    const expectedTotal =
+      Math.round((taxable + deliveryFee + (taxable * taxRate) / 100) * 100) / 100;
+    expect(placed.body.value.discount).toBe(discount);
+    expect(placed.body.value.total).toBe(expectedTotal);
+
+    const offer = await prisma.offer.findUnique({
+      where: { id: 'offer-techzone-wide' },
+    });
+    expect(offer?.redemptionCount ?? 0).toBeGreaterThanOrEqual(1);
   });
 });
