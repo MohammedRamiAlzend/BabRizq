@@ -6,6 +6,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { PlatformSettings } from './model';
+import { api } from '@/shared/lib/api';
 
 /** Default platform configuration. TODO(migration): replaced by `GET /api/admin/settings`. */
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -16,17 +17,12 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   maintenanceMode: false,
 };
 
-/** Simulates `GET /api/admin/settings`. */
+/** GET /admin/settings — the singleton platform configuration. */
 export async function getPlatformSettings(): Promise<PlatformSettings> {
-  return new Promise(resolve => setTimeout(() => resolve(DEFAULT_PLATFORM_SETTINGS), 100));
+  return api.get<PlatformSettings>('/admin/settings');
 }
 
-/** Simulates `PUT /api/admin/settings`. */
+/** PUT /admin/settings — persist platform-wide configuration. */
 export async function updatePlatformSettings(settings: PlatformSettings): Promise<PlatformSettings> {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      Object.assign(DEFAULT_PLATFORM_SETTINGS, settings);
-      resolve(DEFAULT_PLATFORM_SETTINGS);
-    }, 100)
-  );
+  return api.put<PlatformSettings>('/admin/settings', settings);
 }

@@ -6,6 +6,7 @@
  * the legacy monolith.
  */
 import { PlatformStats } from './model';
+import { api } from '@/shared/lib/api';
 
 /** In-memory platform KPIs. TODO(migration): replaced by `GET /api/admin/overview`. */
 export const platformStats: PlatformStats = {
@@ -15,7 +16,7 @@ export const platformStats: PlatformStats = {
   activeMarketers: 134,
 };
 
-/** Simulates `GET /api/admin/overview`. */
+/** GET /admin/overview — platform KPIs (users, stores, revenue, marketers). */
 export async function getPlatformStats(): Promise<PlatformStats> {
-  return new Promise(resolve => setTimeout(() => resolve(platformStats), 100));
+  return api.get<PlatformStats>('/admin/overview');
 }

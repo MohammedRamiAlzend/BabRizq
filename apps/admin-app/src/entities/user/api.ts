@@ -8,6 +8,7 @@
  * Seed data is copied verbatim from the legacy monolith.
  */
 import { PlatformUser, PlatformUserRole } from './model';
+import { api, unwrapList } from '@/shared/lib/api';
 
 /** In-memory user registry. TODO(migration): replaced by `GET /api/admin/users`. */
 export const platformUsers: PlatformUser[] = [
@@ -33,37 +34,50 @@ export const roleLabels: Record<PlatformUserRole, { en: string; ar: string }> = 
   customer: { en: 'Customer', ar: 'عميل' },
 };
 
-/** Simulates `GET /api/admin/users`. */
+/** Backend `PlatformUserView` shape (admin `_shared.md`) — DTO boundary. */
+interface PlatformUserDto {
+  id: string;
+  name: string;
+  nameAr: string;
+  email: string;
+  role: string;
+  status: 'active' | 'suspended';
+  joinedDate: string;
+}
+
+/** Maps the backend view onto the frontend model (role string → union). */
+function toPlatformUser(dto: PlatformUserDto): PlatformUser {
+  return {
+    id: dto.id,
+    name: dto.name,
+    nameAr: dto.nameAr,
+    email: dto.email,
+    role: dto.role as PlatformUserRole,
+    status: dto.status,
+    joinedDate: dto.joinedDate,
+  };
+}
+
+/** GET /admin/users — paginated, searchable user registry. */
 export async function getUsers(): Promise<PlatformUser[]> {
-  return new Promise(resolve => setTimeout(() => resolve(platformUsers), 100));
+  const data = await api.get<PlatformUserDto[] | { items: PlatformUserDto[] }>('/admin/users', {
+    page: 1,
+    pageSize: 100,
+  });
+  return unwrapList(data).map(toPlatformUser);
 }
 
-/** Simulates `PUT /api/admin/users/{id}/role`. */
+/** PUT /admin/users/{id}/role — change a user's platform role. */
 export async function updateUserRole(id: string, role: PlatformUserRole): Promise<PlatformUser> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const user = platformUsers.find(u => u.id === id);
-      if (!user) {
-        reject(new Error('User not found'));
-        return;
-      }
-      user.role = role;
-      resolve(user);
-    }, 100)
-  );
+  const dto = await api.put<PlatformUserDto>(`/admin/users/${id}/role`, { role });
+  return toPlatformUser(dto);
 }
 
-/** Simulates `PUT /api/admin/users/{id}/status`. */
-export async function updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<PlatformUser> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      const user = platformUsers.find(u => u.id === id);
-      if (!user) {
-        reject(new Error('User not found'));
-        return;
-      }
-      user.status = status;
-      resolve(user);
-    }, 100)
-  );
+/** PUT /admin/users/{id}/status — activate or suspend a user. */
+export async function updateUserStatus(
+  id: string,
+  status: 'active' | 'suspended'
+): Promise<PlatformUser> {
+  const dto = await api.put<PlatformUserDto>(`/admin/users/${id}/status`, { status });
+  return toPlatformUser(dto);
 }
