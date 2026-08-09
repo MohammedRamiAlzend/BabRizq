@@ -13,6 +13,7 @@ React 18 · Vite · TypeScript · Tailwind CSS · shadcn/ui · React Router · T
 bun install        # from the repo root (bun workspaces)
 bun run dev        # this directory — http://localhost:8085
 bun run typecheck  # tsc -p tsconfig.app.json --noEmit
+bun run test       # vitest unit tests (entity APIs)
 bun run build      # production build → dist/
 ```
 
@@ -21,8 +22,9 @@ Demo login: username **1** / password **1** (single-role app — no role picker)
 ## Structure
 
 Standard Bab Rizq role-app template (see `REFACTOR_PLAN.md`): `app/` (providers+routing),
-`pages/` (Overview, Links, Performance, Settings), `features/auth`, `entities/marketerData`
-(AffiliateLink, AffiliateTarget + mocks), `shared/` (MarketerSidebar).
+`pages/` (Overview, Links, Performance, Settings), `features/auth`, `entities/affiliateLink`
+(a single FSD slice: `model.ts` + `api.ts` mock functions + `index.ts` — AffiliateLink,
+AffiliateTarget + mocks), `shared/` (MarketerSidebar).
 
 Generic UI lives in `packages/shared` and is imported via path aliases — never edit copies here.
 
