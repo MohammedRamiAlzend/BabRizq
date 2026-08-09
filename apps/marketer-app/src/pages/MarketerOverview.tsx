@@ -25,7 +25,7 @@
 
 import { MousePointerClick, ShoppingBag, Wallet, ArrowUpRight } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { INITIAL_LINKS } from '~/entities/marketerData';
+import { INITIAL_LINKS } from '~/entities/affiliateLink';
 import { useState } from 'react';
 
 const MarketerOverview = () => {

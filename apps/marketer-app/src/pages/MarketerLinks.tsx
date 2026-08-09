@@ -28,7 +28,7 @@
 import { useState } from 'react';
 import { Link2, Copy, Check, Sparkles, Store, Package } from 'lucide-react';
 import { useLocale } from '@/shared/contexts/LocaleContext';
-import { AFFILIATE_TARGETS, AffiliateLink, INITIAL_LINKS } from '~/entities/marketerData';
+import { AFFILIATE_TARGETS, AffiliateLink, INITIAL_LINKS } from '~/entities/affiliateLink';
 import { usePagination } from '@/shared/hooks/usePagination';
 import Pagination from '@/shared/ui/Pagination';
 
