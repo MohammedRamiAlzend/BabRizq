@@ -13,7 +13,7 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { FullOrder } from '~/entities/fulfillmentData';
+import type { FullOrder } from '~/entities/order';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import { todayDate } from '@/shared/lib/utils';
 import { Package, Truck, CheckCircle2, Banknote, ArrowRight } from 'lucide-react';

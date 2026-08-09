@@ -13,7 +13,7 @@ import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocale } from '@/shared/contexts/LocaleContext';
 import { useOrders } from '@/features/orders/model/ordersContext';
-import { FullOrder } from '~/entities/fulfillmentData';
+import type { FullOrder } from '~/entities/order';
 import { OrderBadge } from '@/shared/ui/OrderBadge';
 import Pagination from '@/shared/ui/Pagination';
 import { usePagination } from '@/shared/hooks/usePagination';
