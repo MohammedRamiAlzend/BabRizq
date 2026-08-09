@@ -31,6 +31,8 @@ import { BackofficeModule } from './modules/backoffice/backoffice.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { MarketerModule } from './modules/marketer/marketer.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OffersModule } from './modules/offers/offers.module';
 
 @Module({
   imports: [
@@ -80,6 +82,8 @@ import { AdminModule } from './modules/admin/admin.module';
     DeliveryModule,
     MarketerModule,
     AdminModule,
+    NotificationsModule,
+    OffersModule,
   ],
   providers: [
     // Guard order matters: throttle → auth → roles.

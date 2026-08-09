@@ -4,6 +4,7 @@
  */
 import { MarketerService } from './marketer.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 
 const linkRow = (overrides: Record<string, unknown> = {}) => ({
   id: 'link-1',
@@ -39,7 +40,11 @@ const prisma = {
   },
 } as unknown as PrismaService;
 
-const service = new MarketerService(prisma);
+const notifications = {
+  create: jest.fn().mockResolvedValue(undefined),
+} as unknown as NotificationsService;
+
+const service = new MarketerService(prisma, notifications);
 
 beforeEach(() => jest.clearAllMocks());
 

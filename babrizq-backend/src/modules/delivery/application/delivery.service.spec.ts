@@ -4,6 +4,7 @@
  */
 import { DeliveryService } from './delivery.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 import { StorageService } from '../../storage/storage.types';
 
 const orderRow = (status: string, overrides: Record<string, unknown> = {}) => ({
@@ -36,7 +37,6 @@ const prisma = {
     update: jest.fn(),
   },
   user: { update: jest.fn() },
-  notification: { create: jest.fn() },
   $transaction: jest.fn(),
 } as unknown as PrismaService;
 
@@ -46,7 +46,11 @@ const storage = {
   delete: jest.fn(),
 } as unknown as StorageService;
 
-const service = new DeliveryService(prisma, storage);
+const notifications = {
+  create: jest.fn().mockResolvedValue(undefined),
+} as unknown as NotificationsService;
+
+const service = new DeliveryService(prisma, storage, notifications);
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -94,14 +98,10 @@ describe('DeliveryService.updateStatus', () => {
         }),
       }),
     );
-    expect(prisma.notification.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          recipientUserId: 'customer-1',
-          type: 'delivery_confirmed',
-          orderId: 'order-1',
-        }),
-      }),
+    expect(notifications.create).toHaveBeenCalledWith(
+      'customer-1',
+      expect.objectContaining({ type: 'delivery_confirmed', orderId: 'order-1' }),
+      expect.anything(), // tx
     );
   });
 

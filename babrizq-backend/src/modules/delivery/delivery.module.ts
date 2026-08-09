@@ -4,10 +4,12 @@
  * global modules.
  */
 import { Module } from '@nestjs/common';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { DeliveryController } from './presentation/delivery.controller';
 import { DeliveryService } from './application/delivery.service';
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [DeliveryController],
   providers: [DeliveryService],
 })

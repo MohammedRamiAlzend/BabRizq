@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { ApiError } from '../../../shared/common/errors/api-error';
 import { assertForwardTransition } from '../../../shared/common/orders/order-status';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/application/notifications.service';
 import { StorageService, UploadedFileData } from '../../storage/storage.types';
 import { DeliveryOrderView, toDeliveryOrderView } from './delivery.mapper';
 
@@ -26,6 +27,7 @@ export class DeliveryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -83,9 +85,9 @@ export class DeliveryService {
           },
         });
         if (order.customerUserId) {
-          await tx.notification.create({
-            data: {
-              recipientUserId: order.customerUserId,
+          await this.notifications.create(
+            order.customerUserId,
+            {
               type: 'delivery_confirmed',
               titleEn: 'Order delivered',
               titleAr: 'تم تسليم الطلب',
@@ -93,8 +95,22 @@ export class DeliveryService {
               bodyAr: `تم تسليم الطلب ${order.orderNumber}.`,
               orderId: order.id,
             },
-          });
+            tx,
+          );
         }
+        // The store owner's books close the loop: delivery is done.
+        await this.notifications.create(
+          order.store.ownerUserId,
+          {
+            type: 'delivery_confirmed',
+            titleEn: 'Order delivered',
+            titleAr: 'تم تسليم الطلب',
+            bodyEn: `Order ${order.orderNumber} was delivered to the customer.`,
+            bodyAr: `تم تسليم الطلب ${order.orderNumber} للعميل.`,
+            orderId: order.id,
+          },
+          tx,
+        );
       }
       return result;
     });
