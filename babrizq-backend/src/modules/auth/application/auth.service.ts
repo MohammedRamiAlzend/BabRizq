@@ -7,6 +7,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { Role } from '../../../shared/common/roles';
 import { AuthenticatedUser } from '../../../shared/common/types/authenticated-user';
 import { UserRepository } from '../infrastructure/user.repository';
@@ -14,12 +15,17 @@ import { RefreshTokenRepository } from '../infrastructure/refresh-token.reposito
 import {
   AccountSuspendedError,
   EmailAlreadyRegisteredError,
+  GoogleAuthError,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
 } from '../domain/auth.errors';
 import { TokenService, TokenPair } from './token.service';
 import { LoginDto } from '../presentation/dto/login.dto';
 import { RegisterDto } from '../presentation/dto/register.dto';
+import {
+  GoogleAuthService,
+  GoogleProfile,
+} from '../infrastructure/google-auth.service';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +35,7 @@ export class AuthService {
     private readonly users: UserRepository,
     private readonly refreshTokens: RefreshTokenRepository,
     private readonly tokens: TokenService,
+    private readonly googleAuth: GoogleAuthService,
   ) {}
 
   /** Validates credentials and issues a token pair. */
@@ -97,6 +104,68 @@ export class AuthService {
     if (!user) throw new InvalidCredentialsError();
     const { passwordHash: _ignored, ...safe } = user;
     return safe;
+  }
+
+  // -------------------------------------------------------------------
+  // Google login
+  // -------------------------------------------------------------------
+
+  /** Builds the Google consent URL (redirect flow entry point). */
+  getGoogleAuthorizationUrl(state?: string): string {
+    return this.googleAuth.getAuthorizationUrl(state);
+  }
+
+  /** SPA flow: verify a Google id_token, then upsert + log in the user. */
+  async loginWithGoogleIdToken(idToken: string): Promise<TokenPair> {
+    const profile = await this.googleAuth.verifyIdToken(idToken);
+    return this.loginWithGoogle(profile);
+  }
+
+  /** Redirect flow: exchange the one-time code, then upsert + log in. */
+  async loginWithGoogleAuthorizationCode(code: string): Promise<TokenPair> {
+    const profile = await this.googleAuth.loginWithAuthorizationCode(code);
+    return this.loginWithGoogle(profile);
+  }
+
+  /**
+   * Finds or creates the local account for a verified Google profile:
+   *   1. existing user with the same googleId → log them in
+   *   2. existing user with the same (verified) email → link googleId
+   *   3. otherwise → create a customer account
+   */
+  async loginWithGoogle(profile: GoogleProfile): Promise<TokenPair> {
+    const byGoogleId = await this.users.findByGoogleId(profile.googleId);
+    if (byGoogleId) {
+      this.assertActive(byGoogleId);
+      return this.tokens.issueTokenPair(this.toAuthenticatedUser(byGoogleId));
+    }
+
+    const email = profile.email.toLowerCase();
+    const existing = await this.users.findByEmail(email);
+    if (existing) {
+      // Only link a Google identity to an email we know Google verified —
+      // otherwise anyone with the same email string could take the account.
+      if (!profile.emailVerified) {
+        throw new GoogleAuthError('Google account email is not verified');
+      }
+      await this.users.update(existing.id, { googleId: profile.googleId });
+      this.assertActive(existing);
+      this.logger.log(`Google identity linked to existing account: ${email}`);
+      return this.tokens.issueTokenPair(this.toAuthenticatedUser(existing));
+    }
+
+    const user = await this.users.create({
+      email,
+      // Not a valid bcrypt hash — password login is disabled for this account.
+      passwordHash: randomBytes(32).toString('hex'),
+      googleId: profile.googleId,
+      nameEn: profile.name,
+      nameAr: profile.name,
+      phone: null,
+      role: 'customer',
+    });
+    this.logger.log(`New Google account created: ${email}`);
+    return this.tokens.issueTokenPair(this.toAuthenticatedUser(user));
   }
 
   private assertActive(user: User): void {

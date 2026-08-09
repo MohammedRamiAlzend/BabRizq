@@ -32,3 +32,17 @@ export class EmailAlreadyRegisteredError extends Error {
     this.name = 'EmailAlreadyRegisteredError';
   }
 }
+
+export class GoogleAuthError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'Google authentication failed');
+    this.name = 'GoogleAuthError';
+  }
+}
+
+export class GoogleAuthNotConfiguredError extends Error {
+  constructor() {
+    super('Google login is not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)');
+    this.name = 'GoogleAuthNotConfiguredError';
+  }
+}
