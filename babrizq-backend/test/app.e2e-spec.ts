@@ -898,3 +898,211 @@ describe('Store Owner Accounting (e2e) — P1 live books', () => {
       .expect(403);
   });
 });
+
+describe('Store Owner Warehouse (e2e) — P2 stock, POs & valuation', () => {
+  let app: INestApplication;
+  let storeTkn: string;
+  let customerTkn: string;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('/api/v1');
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+    storeTkn = await roleToken(app, 'store@babrizq.com');
+    customerTkn = await roleToken(app, 'customer@babrizq.com');
+    prisma = app.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('lists the seeded supplier and creates a new one', async () => {
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/store/suppliers')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(list.body.value.items.some((s: { id: string }) => s.id === 'sup-techzone-dist')).toBe(true);
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/store/suppliers')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({
+        nameEn: 'Riyadh Packaging Co',
+        nameAr: 'شركة الرياض للتغليف',
+        contactName: 'Naif',
+        phone: '+966 55 000 0099',
+        leadTimeDays: 3,
+      })
+      .expect(201);
+    expect(created.body.value.nameEn).toBe('Riyadh Packaging Co');
+  });
+
+  it('blocks a cross-store supplier read (unknown store → 404)', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/store/suppliers')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-does-not-exist')
+      .expect(404);
+  });
+
+  it('rejects receiving more than the ordered quantity', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/store/purchase-orders/po-techzone-1/receive')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({ items: [{ productId: 'prod-headphones', quantity: 999 }] })
+      .expect(400);
+  });
+
+  it('low-stock alerts flag the smartphone (threshold 12, stock below)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/store/stock/alerts')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    const flagged = res.body.value.items.find((p: { productId: string }) => p.productId === 'prod-smartphone');
+    expect(flagged).toBeDefined();
+    expect(flagged.stock).toBeLessThanOrEqual(flagged.threshold);
+  });
+
+  it('receives a PO → stock in + FIFO layer + balanced ledger entry', async () => {
+    const before = await prisma.product.findUnique({
+      where: { id: 'prod-headphones' },
+      select: { stock: true },
+    });
+
+    const received = await request(app.getHttpServer())
+      .post('/api/v1/store/purchase-orders/po-techzone-1/receive')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({ items: [{ productId: 'prod-headphones', quantity: 20 }] })
+      .expect(201);
+    expect(received.body.value.status).toBe('partial');
+
+    const after = await prisma.product.findUnique({
+      where: { id: 'prod-headphones' },
+      select: { stock: true },
+    });
+    expect(after?.stock).toBe((before?.stock ?? 0) + 20);
+
+    // FIFO layer exists for the received lot.
+    const batch = await prisma.inventoryBatch.findFirst({
+      where: { productId: 'prod-headphones', quantity: 20 },
+      select: { unitCost: true },
+    });
+    expect(batch?.unitCost).toBe(190);
+
+    // Ledger: DR Inventory / CR Supplier Payable, balanced.
+    const entry = await prisma.journalEntry.findFirst({
+      where: { storeId: 'store-techzone', sourceType: 'purchase_receipt' },
+      include: { lines: true },
+      orderBy: { postedAt: 'desc' },
+    });
+    expect(entry).not.toBeNull();
+    const debit = (entry?.lines ?? []).reduce((sum, l) => sum + l.debit, 0);
+    const credit = (entry?.lines ?? []).reduce((sum, l) => sum + l.credit, 0);
+    expect(debit).toBeCloseTo(credit, 2);
+    expect(debit).toBeCloseTo(20 * 190, 2);
+  });
+
+  it('completes the PO receive → status received, stock fully updated', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/store/purchase-orders/po-techzone-1/receive')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({ items: [{ productId: 'prod-smartphone', quantity: 10 }] })
+      .expect(201);
+
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: 'po-techzone-1' },
+      select: { status: true, receivedAt: true },
+    });
+    expect(po?.status).toBe('received');
+    expect(po?.receivedAt).not.toBeNull();
+  });
+
+  it('stock adjustment posts to the ledger and updates stock', async () => {
+    const before = await prisma.product.findUnique({
+      where: { id: 'prod-smartwatch' },
+      select: { stock: true },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/store/stock/movements')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({ productId: 'prod-smartwatch', quantity: -3, reason: 'Damaged units removed' })
+      .expect(201);
+    expect(res.body.value.stock).toBe((before?.stock ?? 0) - 3);
+
+    const entry = await prisma.journalEntry.findFirst({
+      where: { storeId: 'store-techzone', sourceType: 'stock_adjustment' },
+      include: { lines: true },
+      orderBy: { postedAt: 'desc' },
+    });
+    expect(entry).not.toBeNull();
+    const debit = (entry?.lines ?? []).reduce((sum, l) => sum + l.debit, 0);
+    const credit = (entry?.lines ?? []).reduce((sum, l) => sum + l.credit, 0);
+    expect(debit).toBeCloseTo(credit, 2);
+  });
+
+  it('stocktake snapshot + complete applies variances', async () => {
+    const before = await prisma.product.findUnique({
+      where: { id: 'prod-smartwatch' },
+      select: { stock: true },
+    });
+    const counted = Math.max(0, (before?.stock ?? 0) - 2);
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/store/stock/stocktakes')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({
+        notes: 'Monthly count',
+        items: [{ productId: 'prod-smartwatch', countedQuantity: counted }],
+      })
+      .expect(201);
+    expect(created.body.value.status).toBe('open');
+    expect(created.body.value.items[0].variance).toBe(-2);
+    expect(created.body.value.items[0].systemQuantity).toBe(before?.stock);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/store/stock/stocktakes/${created.body.value.id}/complete`)
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(201);
+
+    const product = await prisma.product.findUnique({
+      where: { id: 'prod-smartwatch' },
+      select: { stock: true },
+    });
+    expect(product?.stock).toBe(counted);
+  });
+
+  it('valuation reports FIFO value > 0 with per-product rows', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/store/stock/valuation')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(res.body.value.total).toBeGreaterThan(0);
+    expect(res.body.value.items.length).toBeGreaterThan(0);
+    const headphones = res.body.value.items.find((p: { productId: string }) => p.productId === 'prod-headphones');
+    expect(headphones).toBeDefined();
+  });
+
+  it('cross-role access to warehouse endpoints is denied', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/store/stock/valuation')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(403);
+  });
+});

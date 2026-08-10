@@ -39,6 +39,11 @@ export interface PostableOrder {
   tax: number;
   total: number;
   items: { qty: number; price: number }[];
+  /**
+   * Real COGS from the FIFO engine (warehouse P2). When provided it
+   * replaces the price-proxy COGS so gross profit is purchase-cost truth.
+   */
+  cogs?: number;
 }
 
 export interface PostableExpense {
@@ -77,7 +82,7 @@ export class LedgerPostingService {
     const receivable = isCod ? ACCOUNT_CODES.AR_COD : ACCOUNT_CODES.AR_CUSTOMER;
     const commission = round2(taxable * PLATFORM_COMMISSION_RATE);
     const cogs = round2(
-      order.items.reduce((sum, item) => sum + item.price * item.qty, 0),
+      order.cogs ?? order.items.reduce((sum, item) => sum + item.price * item.qty, 0),
     );
 
     // Revenue recognized at the discounted, tax-exclusive amount; VAT is a
@@ -140,6 +145,47 @@ export class LedgerPostingService {
     await this.createLinesWithAccounts(order.storeId, entry.id, lines, tx);
 
     await this.invoices.postInvoiceForOrder(order, tx);
+  }
+
+  /**
+   * Generic idempotent posting for source events (PO receipts, stocktakes,
+   * stock adjustments). One entry per `(sourceType, sourceId)` — retries are
+   * no-ops, so a redelivered receive can never double-post to the books.
+   */
+  async postSourceEntry(
+    storeId: string,
+    sourceType: string,
+    sourceId: string,
+    input: {
+      memoEn: string;
+      memoAr: string;
+      lines: { code: string; debit: number; credit: number; descriptionEn?: string; descriptionAr?: string }[];
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    const alreadyPosted = await client.journalEntry.findFirst({
+      where: { storeId, sourceType, sourceId },
+      select: { id: true },
+    });
+    if (alreadyPosted) return this.prisma.journalEntry.findUnique({ where: { id: alreadyPosted.id } });
+
+    const totalDebit = round2(input.lines.reduce((sum, line) => sum + line.debit, 0));
+    const totalCredit = round2(input.lines.reduce((sum, line) => sum + line.credit, 0));
+    if (totalDebit !== totalCredit) {
+      throw ApiError.badRequest(
+        'ENTRY_UNBALANCED',
+        `Journal entry is out of balance (debit ${totalDebit} ≠ credit ${totalCredit})`,
+      );
+    }
+    await this.chart.ensureChartOfAccounts(storeId, client);
+    const entryNumber = await this.nextEntryNumber(storeId, client);
+    const entry = await client.journalEntry.create({
+      data: { storeId, entryNumber, sourceType, sourceId, memoEn: input.memoEn, memoAr: input.memoAr },
+      select: { id: true },
+    });
+    await this.createLinesWithAccounts(storeId, entry.id, input.lines, client);
+    return this.prisma.journalEntry.findUnique({ where: { id: entry.id } });
   }
 
   /** Posts a manual/adjustment entry from explicit line amounts (validates balance). */

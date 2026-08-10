@@ -124,6 +124,9 @@ model Store {
   products    Product[]
   orders      Order[]
   suppliers   Supplier[]
+  purchaseOrders PurchaseOrder[]
+  stockTakes  StockTake[]
+  inventoryBatches InventoryBatch[]
   invoices    Invoice[]
   expenses    Expense[]
   offers      Offer[]
@@ -190,6 +193,14 @@ model Product {
   price            Float
   originalPrice    Float?
   stock            Int      @default(0)
+  // Current unit cost (FIFO-weighted) — feeds stock valuation and, once the
+  // warehouse module consumes FIFO layers at checkout, real COGS in the ledger.
+  cost             Float?
+  // Per-product low-stock override; falls back to StoreSettings.lowStockThreshold.
+  lowStockThreshold Int?
+  // Set when a low-stock alert fires; cleared when restocked above threshold.
+  // Prevents duplicate notifications while the product stays low.
+  lowStockAlertedAt DateTime?
   sku              String?
   rating           Float    @default(0)
   reviewCount      Int      @default(0)
@@ -205,6 +216,9 @@ model Product {
   category    PlatformCategory @relation(fields: [categoryCode], references: [code])
   tags        ProductTag[]
   stockMovements StockMovement[]
+  inventoryBatches InventoryBatch[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockTakeItems StockTakeItem[]
   cartItems   CartItem[]
   orderItems  OrderItem[]
   offers      Offer[]
@@ -236,11 +250,108 @@ model Supplier {
   phone       String?
   email       String?
   address     String?
+  // Expected days from order to delivery — shown on the supplier card and
+  // used to set purchase-order expected dates.
+  leadTimeDays Int?
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store          Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([storeId])
+  @@index([isActive])
+}
+
+model PurchaseOrder {
+  id          String   @id @default(cuid())
+  storeId     String
+  poNumber    String
+  supplierId  String
+  // status ∈ draft | ordered | partial | received | cancelled
+  status      String   @default("draft")
+  expectedAt  DateTime?
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  notes       String?
+  // Ordered amount snapshot (Σ quantity × unitCost) at creation time.
+  totalAmount Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store   Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  supplier Supplier           @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+
+  @@unique([storeId, poNumber])
+  @@index([storeId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id               String @id @default(cuid())
+  purchaseOrderId  String
+  productId        String
+  quantity         Int // ordered quantity
+  receivedQuantity Int    @default(0)
+  unitCost         Float // ordered cost per unit (SAR)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model StockTake {
+  id          String   @id @default(cuid())
+  storeId     String
+  // status ∈ open | completed | cancelled
+  status      String   @default("open")
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items StockTakeItem[]
+
+  @@index([storeId])
+  @@index([status])
+}
+
+model StockTakeItem {
+  id              String @id @default(cuid())
+  stockTakeId     String
+  productId       String
+  countedQuantity Int // physical count entered by the store
+  systemQuantity  Int // system stock snapshot when the count was taken
+  variance        Int // counted - system (positive = found extra units)
+
+  stockTake StockTake @relation(fields: [stockTakeId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([stockTakeId])
+}
+
+/** FIFO cost layer — one row per received lot of units. */
+model InventoryBatch {
+  id         String   @id @default(cuid())
+  storeId    String
+  productId  String
+  // Remaining units in this layer; consumed oldest-first at checkout.
+  quantity   Int
+  unitCost   Float
+  receivedAt DateTime @default(now())
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([productId, receivedAt])
 }
 
 model StockMovement {
@@ -252,6 +363,12 @@ model StockMovement {
   quantity   Int
   reason     String?
   reasonAr   String?
+  // Cost per unit at the time of the movement — purchase cost for receipts,
+  // current unit cost for adjustments. Feeds stock valuation history.
+  unitCost   Float?
+  // Groups the movements produced by one business event (a PO receipt or a
+  // stocktake completion) so the ledger entry can be traced to its source.
+  referenceId String?
   movementDate DateTime @default(now())
 
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -259,6 +376,7 @@ model StockMovement {
 
   @@index([productId])
   @@index([movementDate])
+  @@index([referenceId])
 }
 
 // ------------------------------------------------------------------

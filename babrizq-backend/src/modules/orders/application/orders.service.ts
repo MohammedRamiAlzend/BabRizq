@@ -17,6 +17,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/application/notifications.service';
 import { OffersService } from '../../offers/application/offers.service';
 import { LedgerPostingService } from '../../accounting/application/ledger-posting.service';
+import { FifoCostService } from '../../warehouse/application/fifo-cost.service';
+import { StockService } from '../../warehouse/application/stock.service';
 import { OrderNumberService } from './order-number.service';
 import { CreateOrderDto } from '../presentation/dto/orders.dto';
 
@@ -84,6 +86,8 @@ export class OrdersService {
     private readonly notifications: NotificationsService,
     private readonly offers: OffersService,
     private readonly ledger: LedgerPostingService,
+    private readonly fifo: FifoCostService,
+    private readonly stock: StockService,
   ) {}
 
   /** POST /customer/orders — place an order from the current cart. */
@@ -202,6 +206,13 @@ export class OrdersService {
         });
       }
 
+      // Consume inventory FIFO — real COGS (warehouse P2) replaces the
+      // price proxy so the ledger gross profit is purchase-cost truth.
+      let cogs = 0;
+      for (const item of cart.items) {
+        cogs += await this.fifo.consumeForOrder(item.productId, item.quantity, tx);
+      }
+
       // Book the order in the ledger + issue the tax invoice — atomically
       // with the order itself, so the books can never miss an order.
       await this.ledger.postOrder(
@@ -219,6 +230,7 @@ export class OrdersService {
             qty: item.qty,
             price: item.price,
           })),
+          cogs: round2(cogs),
         },
         tx,
       );
@@ -237,23 +249,12 @@ export class OrdersService {
         },
         tx,
       );
-      for (const item of cart.items) {
-        const remaining = item.product.stock - item.quantity;
-        if (remaining < (settings?.lowStockThreshold ?? 10)) {
-          await this.notifications.create(
-            store.ownerUserId,
-            {
-              type: 'low_stock',
-              titleEn: 'Low stock',
-              titleAr: 'مخزون منخفض',
-              bodyEn: `"${item.product.nameEn}" is down to ${remaining} units.`,
-              bodyAr: `"${item.product.nameAr}" تبقى منه ${remaining} وحدة.`,
-              orderId: created.id,
-            },
-            tx,
-          );
-        }
-      }
+      // Low-stock alerts — once per episode (deduped by the warehouse).
+      await this.stock.checkAndAlertLowStock(
+        storeId,
+        cart.items.map((i) => i.productId),
+        tx,
+      );
       return created;
     });
 
