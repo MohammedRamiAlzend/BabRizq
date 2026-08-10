@@ -207,7 +207,8 @@ async function main(): Promise<void> {
 
   const headphones = await prisma.product.upsert({
     where: { id: 'prod-headphones' },
-    update: {},
+    // Reset the baseline on re-seed so e2e runs are deterministic.
+    update: { stock: 45, cost: 190, lowStockAlertedAt: null },
     create: {
       id: 'prod-headphones',
       storeId: store.id,
@@ -219,6 +220,7 @@ async function main(): Promise<void> {
       price: 299,
       originalPrice: 349,
       stock: 45,
+      cost: 190,
       sku: 'ELEC-001',
       rating: 4.7,
       reviewCount: 128,
@@ -237,7 +239,7 @@ async function main(): Promise<void> {
 
   await prisma.product.upsert({
     where: { id: 'prod-smartphone' },
-    update: {},
+    update: { stock: 8, cost: 610, lowStockThreshold: 12, lowStockAlertedAt: null },
     create: {
       id: 'prod-smartphone',
       storeId: store.id,
@@ -248,6 +250,8 @@ async function main(): Promise<void> {
       descriptionAr: 'شاشة OLED، تخزين 256 جيجا، كاميرا 108 ميجابكسل.',
       price: 899,
       stock: 8,
+      cost: 610,
+      lowStockThreshold: 12,
       sku: 'ELEC-002',
       rating: 4.9,
       reviewCount: 342,
@@ -258,7 +262,7 @@ async function main(): Promise<void> {
   // cross-category browsing + the "wearable" tag group).
   await prisma.product.upsert({
     where: { id: 'prod-smartwatch' },
-    update: {},
+    update: { stock: 25, cost: 320, lowStockAlertedAt: null },
     create: {
       id: 'prod-smartwatch',
       storeId: store.id,
@@ -270,6 +274,7 @@ async function main(): Promise<void> {
       price: 499,
       originalPrice: 549,
       stock: 25,
+      cost: 320,
       sku: 'ELEC-003',
       rating: 4.6,
       reviewCount: 64,
@@ -311,6 +316,65 @@ async function main(): Promise<void> {
       discountValue: 50,
       validFrom: new Date(),
       status: 'active',
+    },
+  });
+
+  // ---- Warehouse P2: supplier + opening FIFO layers + a draft purchase order ----
+  // The supplier directory and a PO give the store-owner warehouse UI and the
+  // FIFO receive flow live data to exercise.
+  await prisma.supplier.upsert({
+    where: { id: 'sup-techzone-dist' },
+    update: {},
+    create: {
+      id: 'sup-techzone-dist',
+      storeId: store.id,
+      nameEn: 'Al-Mutairi Electronics Distribution',
+      nameAr: 'توزيع المطيري للإلكترونيات',
+      contactName: 'Abdullah Al-Mutairi',
+      phone: '+966 55 000 0013',
+      email: 'sales@almutairi-dist.sa',
+      address: 'Industrial District, Riyadh',
+      leadTimeDays: 5,
+    },
+  });
+
+  // Opening FIFO layers — the seeded stock is valued at its unit cost.
+  // StockMovements reference the receive/stocktake events, so clear them too.
+  await prisma.stockMovement.deleteMany({
+    where: { product: { storeId: store.id } },
+  });
+  await prisma.inventoryBatch.deleteMany({ where: { storeId: store.id } });
+  await prisma.inventoryBatch.createMany({
+    data: [
+      { storeId: store.id, productId: 'prod-headphones', quantity: 45, unitCost: 190 },
+      { storeId: store.id, productId: 'prod-smartphone', quantity: 8, unitCost: 610 },
+      { storeId: store.id, productId: 'prod-smartwatch', quantity: 25, unitCost: 320 },
+    ],
+  });
+
+  // A purchase order the store can receive against (FIFO receive flow).
+  // Re-seeded to 'ordered' with fresh lines so e2e receive flows are
+  // deterministic across runs.
+  await prisma.purchaseOrderItem.deleteMany({
+    where: { purchaseOrder: { storeId: store.id } },
+  });
+  await prisma.purchaseOrder.deleteMany({ where: { storeId: store.id } });
+  await prisma.purchaseOrder.create({
+    data: {
+      id: 'po-techzone-1',
+      storeId: store.id,
+      poNumber: 'PO-2026-0001',
+      supplierId: 'sup-techzone-dist',
+      status: 'ordered',
+      orderedAt: new Date(),
+      expectedAt: new Date(Date.now() + 5 * 86400000),
+      totalAmount: 20 * 190 + 10 * 610,
+      items: {
+        create: [
+          { productId: 'prod-headphones', quantity: 20, unitCost: 190 },
+          { productId: 'prod-smartphone', quantity: 10, unitCost: 610 },
+        ],
+      },
     },
   });
 
@@ -360,6 +424,7 @@ async function main(): Promise<void> {
       price: 189,
       originalPrice: 240,
       stock: 40,
+      cost: 110,
       sku: 'LTHR-001',
       rating: 4.5,
       reviewCount: 156,
@@ -384,6 +449,7 @@ async function main(): Promise<void> {
       price: 899,
       originalPrice: 999,
       stock: 12,
+      cost: 540,
       sku: 'LTHR-002',
       rating: 4.8,
       reviewCount: 203,
@@ -408,6 +474,7 @@ async function main(): Promise<void> {
       descriptionAr: 'حذاء رياضي خفيف وقابل للتنفس للاستخدام اليومي.',
       price: 449,
       stock: 30,
+      cost: 260,
       sku: 'LTHR-003',
       rating: 4.4,
       reviewCount: 98,
