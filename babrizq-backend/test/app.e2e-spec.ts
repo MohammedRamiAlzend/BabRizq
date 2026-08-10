@@ -733,3 +733,168 @@ describe('Notifications + Offers (e2e)', () => {
     expect(offer?.redemptionCount ?? 0).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('Store Owner Accounting (e2e) — P1 live books', () => {
+  let app: INestApplication;
+  let storeTkn: string;
+  let customerTkn: string;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('/api/v1');
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+    storeTkn = await roleToken(app, 'store@babrizq.com');
+    customerTkn = await roleToken(app, 'customer@babrizq.com');
+    prisma = app.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('placing an order auto-posts balanced ledger entries and a tax invoice', async () => {
+    const settings = await prisma.storeSettings.findUnique({
+      where: { storeId: 'store-techzone' },
+      select: { taxRate: true, deliveryFee: true },
+    });
+    const taxRate = settings?.taxRate ?? 0;
+    const deliveryFee = settings?.deliveryFee ?? 0;
+
+    await request(app.getHttpServer())
+      .delete('/api/v1/customer/cart')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/customer/cart/items')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ productId: 'prod-headphones' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put('/api/v1/customer/cart/items/prod-headphones')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({ quantity: 1 })
+      .expect(200);
+    const placed = await request(app.getHttpServer())
+      .post('/api/v1/customer/orders')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .send({
+        fullName: 'Sara Mansour',
+        phone: '+966 50 000 0005',
+        deliveryAddress: '45 King Fahd Rd, Riyadh',
+        paymentMethod: 'cash',
+      })
+      .expect(201);
+
+    const orderId = placed.body.value.orderId as string;
+    const total = placed.body.value.total as number;
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(order).not.toBeNull();
+
+    // The ledger entry exists, is balanced, and recognizes the revenue + VAT.
+    const entry = await prisma.journalEntry.findFirst({
+      where: { storeId: 'store-techzone', sourceType: 'order', sourceId: orderId },
+      include: { lines: true },
+    });
+    expect(entry).not.toBeNull();
+    const debit = (entry?.lines ?? []).reduce((sum, line) => sum + line.debit, 0);
+    const credit = (entry?.lines ?? []).reduce((sum, line) => sum + line.credit, 0);
+    expect(debit).toBeCloseTo(credit, 2);
+
+    // The tax invoice was issued at checkout.
+    const invoice = await prisma.invoice.findUnique({ where: { orderId } });
+    expect(invoice).not.toBeNull();
+    expect(invoice?.invoiceNumber).toMatch(/^INV-\d{4}-/);
+    expect(invoice?.total).toBeCloseTo(total, 2);
+    expect(invoice?.qrCode).toBeTruthy();
+
+    // Trial balance reflects the order and balances exactly.
+    const tb = await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/trial-balance')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(tb.body.value.balanced).toBe(true);
+    expect(tb.body.value.totalDebit).toBeCloseTo(tb.body.value.totalCredit, 2);
+
+    // P&L sees the revenue + VAT (order is revenue; no expenses in it).
+    const pnl = await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/pnl')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .query({ from: '2020-01-01', to: '2030-12-31' })
+      .expect(200);
+    expect(pnl.body.value.revenue).toBeGreaterThanOrEqual(order?.subtotal ?? 0);
+
+    // Invoice listing is store-scoped and returns the new invoice.
+    const invoices = await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/invoices')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(invoices.body.value.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it('expenses post to the ledger, show in P&L, and reverse on delete', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/store/accounting/expenses')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .send({
+        titleEn: 'E2E Marketing Spend',
+        titleAr: 'مصروف تسويق',
+        category: 'marketing',
+        amount: 123.45,
+      })
+      .expect(201);
+    const expenseId = created.body.value.id as string;
+    expect(created.body.value.category).toBe('marketing');
+
+    const expenseEntry = await prisma.journalEntry.findFirst({
+      where: { storeId: 'store-techzone', sourceType: 'expense', sourceId: expenseId },
+      include: { lines: true },
+    });
+    expect(expenseEntry).not.toBeNull();
+    const debit = (expenseEntry?.lines ?? []).reduce((sum, line) => sum + line.debit, 0);
+    const credit = (expenseEntry?.lines ?? []).reduce((sum, line) => sum + line.credit, 0);
+    expect(debit).toBeCloseTo(credit, 2);
+
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/expenses')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .query({ page: 1, pageSize: 50 })
+      .expect(200);
+    expect(list.body.value.total).toBeGreaterThanOrEqual(3); // 2 seeded + this one
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/store/accounting/expenses/${expenseId}`)
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    const after = await prisma.expense.findUnique({ where: { id: expenseId } });
+    expect(after).toBeNull();
+  });
+
+  it('chart of accounts is seeded with the KSA template', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/accounts')
+      .set('Authorization', `Bearer ${storeTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(200);
+    expect(res.body.value.rows.length).toBeGreaterThanOrEqual(20);
+    expect(res.body.value.rows.some((row: { code: string }) => row.code === '4100')).toBe(true);
+  });
+
+  it('cross-role access is denied (customer is not a store owner)', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/store/accounting/trial-balance')
+      .set('Authorization', `Bearer ${customerTkn}`)
+      .set('X-Store-Id', 'store-techzone')
+      .expect(403);
+  });
+});

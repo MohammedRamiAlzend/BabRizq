@@ -7,6 +7,7 @@ import { OrderNumberService } from './order-number.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/application/notifications.service';
 import { OffersService } from '../../offers/application/offers.service';
+import { LedgerPostingService } from '../../accounting/application/ledger-posting.service';
 
 /** Cart: 2 × headphones @ 299, store with taxRate 15 / deliveryFee 15. */
 const cartFixture = {
@@ -69,7 +70,11 @@ const offers = {
   bestDiscount: jest.fn(() => ({ discount: 0, offerId: null })),
 } as unknown as OffersService;
 
-const service = new OrdersService(prisma, orderNumbers, notifications, offers);
+const ledger = {
+  postOrder: jest.fn().mockResolvedValue(undefined),
+} as unknown as LedgerPostingService;
+
+const service = new OrdersService(prisma, orderNumbers, notifications, offers, ledger);
 
 beforeEach(() => jest.clearAllMocks());
 

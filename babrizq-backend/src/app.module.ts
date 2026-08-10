@@ -33,6 +33,7 @@ import { MarketerModule } from './modules/marketer/marketer.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OffersModule } from './modules/offers/offers.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { OffersModule } from './modules/offers/offers.module';
     AdminModule,
     NotificationsModule,
     OffersModule,
+    AccountingModule,
   ],
   providers: [
     // Guard order matters: throttle → auth → roles.
