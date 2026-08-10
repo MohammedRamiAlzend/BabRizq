@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/application/notifications.service';
 import { OffersService } from '../../offers/application/offers.service';
 import { LedgerPostingService } from '../../accounting/application/ledger-posting.service';
+import { FifoCostService } from '../../warehouse/application/fifo-cost.service';
+import { StockService } from '../../warehouse/application/stock.service';
 
 /** Cart: 2 × headphones @ 299, store with taxRate 15 / deliveryFee 15. */
 const cartFixture = {
@@ -74,7 +76,15 @@ const ledger = {
   postOrder: jest.fn().mockResolvedValue(undefined),
 } as unknown as LedgerPostingService;
 
-const service = new OrdersService(prisma, orderNumbers, notifications, offers, ledger);
+const fifo = {
+  consumeForOrder: jest.fn().mockResolvedValue(0),
+} as unknown as FifoCostService;
+
+const stock = {
+  checkAndAlertLowStock: jest.fn().mockResolvedValue(undefined),
+} as unknown as StockService;
+
+const service = new OrdersService(prisma, orderNumbers, notifications, offers, ledger, fifo, stock);
 
 beforeEach(() => jest.clearAllMocks());
 

@@ -5,12 +5,13 @@ import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OffersModule } from '../offers/offers.module';
 import { AccountingModule } from '../accounting/accounting.module';
+import { WarehouseModule } from '../warehouse/warehouse.module';
 import { OrdersController } from './presentation/orders.controller';
 import { OrdersService } from './application/orders.service';
 import { OrderNumberService } from './application/order-number.service';
 
 @Module({
-  imports: [NotificationsModule, OffersModule, AccountingModule],
+  imports: [NotificationsModule, OffersModule, AccountingModule, WarehouseModule],
   controllers: [OrdersController],
   providers: [OrdersService, OrderNumberService],
   exports: [OrdersService],
