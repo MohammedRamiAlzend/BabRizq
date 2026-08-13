@@ -22,8 +22,10 @@ import { AdminUsersService } from '../application/admin-users.service';
 import { AdminSettingsService } from '../application/admin-settings.service';
 import { AdminOverviewService } from '../application/admin-overview.service';
 import {
+  ChangePasswordDto,
   CreateUserDto,
   ListUsersQueryDto,
+  UpdateMeDto,
   UpdatePlatformSettingsDto,
   UpdateUserRoleDto,
   UpdateUserStatusDto,
@@ -44,6 +46,29 @@ export class AdminController {
   @ApiOperation({ summary: 'Platform dashboard metrics' })
   getOverview() {
     return this.overview.getOverview();
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: 'Current admin profile' })
+  getMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.users.getMe(user.sub);
+  }
+
+  @Put('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update current admin profile (partial)' })
+  updateMe(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateMeDto) {
+    return this.users.updateMe(user.sub, dto);
+  }
+
+  @Post('me/change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change the current admin password' })
+  changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<null> {
+    return this.users.changePassword(user.sub, dto);
   }
 
   @Get('users')

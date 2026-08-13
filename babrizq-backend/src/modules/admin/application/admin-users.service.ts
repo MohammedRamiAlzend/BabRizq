@@ -24,6 +24,16 @@ import { PlatformUserView, toPlatformUserView } from './admin.mapper';
 /** Generates a 12-character, URL-safe temporary password. */
 const generatePassword = (): string => randomBytes(9).toString('base64url');
 
+/** AdminProfile shape (admin-app profile.md). */
+export interface AdminProfileView {
+  id: string;
+  name: string;
+  nameAr: string;
+  email: string;
+  role: 'admin';
+  joinedDate: string;
+}
+
 @Injectable()
 export class AdminUsersService {
   private readonly logger = new Logger(AdminUsersService.name);
@@ -152,9 +162,90 @@ export class AdminUsersService {
     return toPlatformUserView(updated);
   }
 
+  // ---- My account (profile.md) ----
+
+  /** GET /admin/me — the current admin's profile. */
+  async getMe(actorId: string): Promise<AdminProfileView> {
+    const user = await this.prisma.user.findUnique({ where: { id: actorId } });
+    if (!user) {
+      throw ApiError.notFound('USER_NOT_FOUND', 'User not found');
+    }
+    return this.toProfileView(user);
+  }
+
+  /** PUT /admin/me — partial profile update (name / nameAr / email). */
+  async updateMe(
+    actorId: string,
+    dto: { name?: string; nameAr?: string; email?: string },
+  ): Promise<AdminProfileView> {
+    if (dto.email) {
+      const clash = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+        select: { id: true },
+      });
+      if (clash && clash.id !== actorId) {
+        throw ApiError.conflict('EMAIL_ALREADY_EXISTS', 'Email is already in use');
+      }
+    }
+
+    const data: Prisma.UserUpdateInput = {};
+    if (dto.name !== undefined) data.nameEn = dto.name;
+    if (dto.nameAr !== undefined) data.nameAr = dto.nameAr;
+    if (dto.email !== undefined) data.email = dto.email;
+
+    const updated = await this.prisma.user.update({
+      where: { id: actorId },
+      data,
+    });
+    return this.toProfileView(updated);
+  }
+
+  /**
+   * POST /admin/me/change-password — verifies the current password first.
+   * Error codes per profile.md: WRONG_CURRENT_PASSWORD (401),
+   * PASSWORDS_DO_NOT_MATCH (422), PASSWORD_TOO_SHORT (422).
+   */
+  async changePassword(
+    actorId: string,
+    dto: { currentPassword: string; newPassword: string; confirmPassword: string },
+  ): Promise<null> {
+    const user = await this.prisma.user.findUnique({ where: { id: actorId } });
+    if (!user || !(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+      throw new ApiError('WRONG_CURRENT_PASSWORD', 401, 'Current password is incorrect');
+    }
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new ApiError('PASSWORDS_DO_NOT_MATCH', 422, 'New password and confirmation do not match');
+    }
+    if (dto.newPassword.length < 8) {
+      throw new ApiError('PASSWORD_TOO_SHORT', 422, 'New password must be at least 8 characters');
+    }
+    await this.prisma.user.update({
+      where: { id: actorId },
+      data: { passwordHash: await bcrypt.hash(dto.newPassword, 10) },
+    });
+    return null;
+  }
+
+  private toProfileView(user: {
+    id: string;
+    nameEn: string;
+    nameAr: string;
+    email: string;
+    role: string;
+    createdAt: Date;
+  }): AdminProfileView {
+    return {
+      id: user.id,
+      name: user.nameEn,
+      nameAr: user.nameAr,
+      email: user.email,
+      role: user.role as AdminProfileView['role'],
+      joinedDate: user.createdAt.toISOString(),
+    };
+  }
+
   /** DELETE /admin/users/:id — self-deletion blocked; FK-guarded delete. */
-  async deleteUser(userId: string, actorId: string): Promise<null> {
-    if (userId === actorId) {
+  async deleteUser(userId: string, actorId: string): Promise<null> {    if (userId === actorId) {
       throw ApiError.badRequest(
         'CANNOT_DELETE_SELF',
         'An admin cannot delete their own account',

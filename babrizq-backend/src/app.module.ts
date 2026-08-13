@@ -34,6 +34,8 @@ import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OffersModule } from './modules/offers/offers.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { ChatModule } from './modules/chat/chat.module';
+import { SalesReportsModule } from './modules/sales-reports/sales-reports.module';
 
 @Module({
   imports: [
@@ -86,6 +88,8 @@ import { AccountingModule } from './modules/accounting/accounting.module';
     NotificationsModule,
     OffersModule,
     AccountingModule,
+    ChatModule,
+    SalesReportsModule,
   ],
   providers: [
     // Guard order matters: throttle → auth → roles.

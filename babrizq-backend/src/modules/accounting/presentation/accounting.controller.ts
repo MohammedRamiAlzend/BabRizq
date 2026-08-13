@@ -32,6 +32,7 @@ import {
   PeriodQueryDto,
   TrialBalanceQueryDto,
 } from './dto/accounting.dto';
+import { CreateManualInvoiceDto } from './dto/invoices.dto';
 
 @ApiTags('Store Owner Accounting')
 @ApiBearerAuth()
@@ -152,5 +153,15 @@ export class AccountingController {
     @Query() query: JournalQueryDto,
   ) {
     return this.invoices.listInvoicesForStore(user.sub, storeId, query);
+  }
+
+  @Post('invoices')
+  @ApiOperation({ summary: 'Create a manual invoice linked to an order' })
+  createManualInvoice(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-store-id') storeId: string | undefined,
+    @Body() dto: CreateManualInvoiceDto,
+  ) {
+    return this.invoices.createManualInvoice(user.sub, storeId, dto);
   }
 }

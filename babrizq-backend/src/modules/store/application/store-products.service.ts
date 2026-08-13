@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { ApiError } from '../../../shared/common/errors/api-error';
 import { buildPaginated } from '../../../shared/common/pagination/paginated';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService, UploadedFileData } from '../../storage/storage.types';
 import { StoreProductView, toStoreProductView } from './store.mapper';
 import { resolveOwnedStore } from './store-context';
 
@@ -31,7 +32,10 @@ const PRODUCT_INCLUDE = { category: true, tags: true } satisfies Prisma.ProductI
 
 @Injectable()
 export class StoreProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   /** GET /store/products — paginated list with search + category filter. */
   async listProducts(
@@ -166,6 +170,25 @@ export class StoreProductsService {
     const store = await resolveOwnedStore(this.prisma, ownerUserId, storeId);
     await this.assertProductBelongsToStore(store.id, productId);
     return { entries: [] };
+  }
+
+  /**
+   * POST /store/products/:id/images — stores one image for the product and
+   * returns its URL (the client persists it via the `images` array).
+   */
+  async uploadImage(
+    ownerUserId: string,
+    storeId: string | undefined,
+    productId: string,
+    file: UploadedFileData | undefined,
+  ): Promise<{ url: string }> {
+    const store = await resolveOwnedStore(this.prisma, ownerUserId, storeId);
+    await this.assertProductBelongsToStore(store.id, productId);
+    if (!file || file.size === 0) {
+      throw ApiError.badRequest('NO_FILE_UPLOADED', 'No file uploaded');
+    }
+    const stored = await this.storage.save(file, 'products');
+    return { url: stored.url };
   }
 
   // ------------------------------------------------------------------

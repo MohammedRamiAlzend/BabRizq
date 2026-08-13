@@ -86,6 +86,45 @@ export class UpdateUserStatusDto {
   status!: 'active' | 'suspended';
 }
 
+export class UpdateMeDto {
+  @ApiPropertyOptional({ description: 'English display name' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Arabic display name' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  nameAr?: string;
+
+  @ApiPropertyOptional({ example: 'admin@babrizq.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'Current password (verified first)' })
+  @IsString()
+  @IsNotEmpty()
+  currentPassword!: string;
+
+  @ApiProperty({ description: 'New password (min 8 characters)' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  newPassword!: string;
+
+  @ApiProperty({ description: 'Must equal newPassword' })
+  @IsString()
+  @IsNotEmpty()
+  confirmPassword!: string;
+}
+
 export class UpdatePlatformSettingsDto {
   @ApiPropertyOptional()
   @IsOptional()

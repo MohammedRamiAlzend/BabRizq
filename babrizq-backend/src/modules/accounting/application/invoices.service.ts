@@ -6,6 +6,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { Invoice, Prisma } from '@prisma/client';
+import { ApiError } from '../../../shared/common/errors/api-error';
 import { PrismaService } from '../../prisma/prisma.service';
 import { resolveOwnedStore } from '../../store/application/store-context';
 import { round2 } from './account-codes';
@@ -19,6 +20,24 @@ export interface InvoiceForOrder {
   deliveryFee: number;
   tax: number;
   total: number;
+}
+
+/** Invoice shape (store-owner accounting.md). */
+export interface InvoiceView {
+  id: string;
+  invoiceNumber: string;
+  orderId: string;
+  orderNumber: string;
+  customerNameEn: string;
+  customerNameAr: string;
+  items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  currency: string;
+  date: string; // YYYY-MM-DD
+  status: 'paid' | 'unpaid' | 'cancelled';
 }
 
 /** ZATCA TLV tag IDs for the simplified tax invoice QR. */
@@ -104,7 +123,117 @@ export class InvoicesService {
         },
       }),
     ]);
-    return { items, total, page: query.page, pageSize: query.pageSize };
+    return {
+      items: items.map((row) => this.toInvoiceView(row, row.order)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  /**
+   * POST /store/accounting/invoices — manual invoice linked to an existing
+   * order (idempotent per order). Errors: ORDER_NOT_FOUND (404),
+   * INVOICE_ALREADY_EXISTS (409).
+   */
+  async createManualInvoice(
+    ownerUserId: string,
+    storeId: string | undefined,
+    dto: {
+      orderId: string;
+      orderNumber: string;
+      customerNameEn: string;
+      customerNameAr: string;
+      items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+      subtotal: number;
+      discount: number;
+      tax: number;
+      total: number;
+      currency: string;
+      date: string;
+      status: 'paid' | 'unpaid' | 'cancelled';
+    },
+  ): Promise<InvoiceView> {
+    const store = await resolveOwnedStore(this.prisma, ownerUserId, storeId);
+    const order = await this.prisma.order.findFirst({
+      where: { id: dto.orderId, storeId: store.id },
+      select: {
+        id: true,
+        orderNumber: true,
+        customerNameEn: true,
+        customerNameAr: true,
+        items: true,
+      },
+    });
+    if (!order) {
+      throw ApiError.notFound('ORDER_NOT_FOUND', 'Order not found in this store');
+    }
+    const existing = await this.prisma.invoice.findUnique({
+      where: { orderId: order.id },
+      select: { id: true },
+    });
+    if (existing) {
+      throw ApiError.conflict('INVOICE_ALREADY_EXISTS', 'An invoice already exists for this order');
+    }
+
+    const invoice = await this.prisma.invoice.create({
+      data: {
+        storeId: store.id,
+        orderId: order.id,
+        invoiceNumber: await this.nextInvoiceNumber(store.id, this.prisma),
+        subtotal: round2(dto.subtotal),
+        discount: round2(dto.discount),
+        tax: round2(dto.tax),
+        total: round2(dto.total),
+        currency: dto.currency,
+        issueDate: new Date(dto.date),
+        status: dto.status === 'paid' ? 'paid' : dto.status === 'cancelled' ? 'cancelled' : 'issued',
+      },
+    });
+    return this.toInvoiceView(invoice, {
+      orderNumber: dto.orderNumber,
+      customerNameEn: dto.customerNameEn,
+      customerNameAr: dto.customerNameAr,
+      items: dto.items,
+    });
+  }
+
+  /** Maps a stored invoice (+ linked order) to the accounting.md view. */
+  private toInvoiceView(
+    invoice: Invoice,
+    order: {
+      orderNumber: string;
+      customerNameEn: string;
+      customerNameAr: string;
+      items: { nameEn: string; nameAr: string; qty: number; price: number }[];
+    },
+  ): InvoiceView {
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      orderId: invoice.orderId,
+      orderNumber: order.orderNumber,
+      customerNameEn: order.customerNameEn,
+      customerNameAr: order.customerNameAr,
+      items: order.items.map((item) => ({
+        nameEn: item.nameEn,
+        nameAr: item.nameAr,
+        qty: item.qty,
+        price: item.price,
+      })),
+      subtotal: invoice.subtotal,
+      discount: invoice.discount,
+      tax: invoice.tax,
+      total: invoice.total,
+      currency: invoice.currency,
+      date: invoice.issueDate.toISOString().slice(0, 10),
+      status:
+        invoice.status === 'paid'
+          ? 'paid'
+          : invoice.status === 'cancelled'
+            ? 'cancelled'
+            : 'unpaid',
+    };
   }
 
   /** Builds the ZATCA Phase-1 TLV payload (base64 — QR image in P3). */

@@ -62,4 +62,70 @@ export class BackofficeDriversService {
     });
     return toDriverView(updated);
   }
+
+  /**
+   * GET /backoffice/drivers/locations — live driver pin data for the map
+   * (map.md). Coordinates are derived from the driver's active order
+   * (assigned/in_transit); drivers without one report `available`.
+   */
+  async getLocations(): Promise<DriverLocationView[]> {
+    const drivers = await this.prisma.user.findMany({
+      where: { role: 'delivery' },
+      include: { driverProfile: true },
+      orderBy: { nameEn: 'asc' },
+    });
+    const orders = await this.prisma.order.findMany({
+      where: {
+        assignedDriverId: { in: drivers.map((driver) => driver.id) },
+        status: { in: ['assigned', 'in_transit'] },
+      },
+      select: {
+        assignedDriverId: true,
+        lat: true,
+        lng: true,
+        status: true,
+        updatedAt: true,
+      },
+    });
+
+    // Newest active order per driver wins (findMany is unsorted, so keep the
+    // first occurrence per driver for a stable pick).
+    const byDriver = new Map<string, (typeof orders)[number]>();
+    for (const order of orders) {
+      if (order.assignedDriverId && !byDriver.has(order.assignedDriverId)) {
+        byDriver.set(order.assignedDriverId, order);
+      }
+    }
+
+    return drivers.map((driver): DriverLocationView => {
+      const active = byDriver.get(driver.id);
+      if (!active) {
+        return {
+          driverId: driver.id,
+          lat: 0,
+          lng: 0,
+          status: 'available',
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        driverId: driver.id,
+        lat: active.lat ?? 0,
+        lng: active.lng ?? 0,
+        status: active.status === 'in_transit' ? 'in_transit' : 'assigned',
+        updatedAt: active.updatedAt.toISOString(),
+      };
+    });
+  }
+}
+
+/** DriverLocation shape (back-office map.md). */
+export interface DriverLocationView {
+  driverId: string;
+  lat: number;
+  lng: number;
+  heading?: number;
+  speed?: number;
+  status: 'available' | 'assigned' | 'in_transit';
+  updatedAt: string;
 }

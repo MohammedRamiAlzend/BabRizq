@@ -67,6 +67,12 @@ export class BackofficeController {
     return this.drivers.listDrivers();
   }
 
+  @Get('drivers/locations')
+  @ApiOperation({ summary: 'Live driver GPS pins for the map (polling fallback)' })
+  listDriverLocations() {
+    return this.drivers.getLocations();
+  }
+
   @Patch('drivers/:id/availability')
   @ApiOperation({ summary: 'Toggle a driver availability flag' })
   setAvailability(
