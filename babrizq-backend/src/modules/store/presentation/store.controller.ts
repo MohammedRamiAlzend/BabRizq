@@ -15,8 +15,11 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../shared/common/decorators/roles.decorator';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../../shared/common/types/authenticated-user';
@@ -101,6 +104,19 @@ export class StoreController {
     return this.products.getPriceHistory(user.sub, storeId, productId);
   }
 
+  @Post('products/:id/images')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a product image (returns { url } to persist via the images array)' })
+  uploadProductImage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-store-id') storeId: string | undefined,
+    @Param('id') productId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.products.uploadImage(user.sub, storeId, productId, file);
+  }
+
   // ---- Categories ----
 
   @Get('categories')
@@ -172,6 +188,16 @@ export class StoreController {
     @Body() dto: AdvanceOrderStatusDto,
   ) {
     return this.orders.advanceOrderStatus(user.sub, storeId, orderId, dto.status);
+  }
+
+  @Get('orders/:id/receipt')
+  @ApiOperation({ summary: 'Generate a printable receipt for an order (returns its URL)' })
+  getOrderReceipt(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-store-id') storeId: string | undefined,
+    @Param('id') orderId: string,
+  ) {
+    return this.orders.getReceipt(user.sub, storeId, orderId);
   }
 
   // ---- Overview ----

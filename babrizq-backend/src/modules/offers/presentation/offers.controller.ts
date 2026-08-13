@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -24,6 +25,7 @@ import { OffersService } from '../application/offers.service';
 import {
   CreateOfferDto,
   ListOffersQueryDto,
+  ToggleOfferDto,
   UpdateOfferDto,
 } from './dto/offers.dto';
 
@@ -80,6 +82,18 @@ export class OffersController {
     @Param('id') offerId: string,
   ): Promise<null> {
     return this.offers.deleteOffer(user.sub, storeId, offerId);
+  }
+
+  @Patch(':id/toggle')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Toggle the offer active flag without touching other fields' })
+  toggle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('x-store-id') storeId: string | undefined,
+    @Param('id') offerId: string,
+    @Body() dto: ToggleOfferDto,
+  ) {
+    return this.offers.toggle(user.sub, storeId, offerId, dto.isActive);
   }
 
   @Post(':id/activate')

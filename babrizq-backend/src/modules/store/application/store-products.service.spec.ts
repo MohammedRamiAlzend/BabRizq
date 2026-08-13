@@ -4,6 +4,7 @@
  */
 import { StoreProductsService } from './store-products.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../../storage/storage.types';
 
 const prisma = {
   store: { findUnique: jest.fn() },
@@ -19,7 +20,11 @@ const prisma = {
   offer: { findMany: jest.fn() },
 } as unknown as PrismaService;
 
-const service = new StoreProductsService(prisma);
+const storage = {
+  save: jest.fn(),
+} as unknown as StorageService;
+
+const service = new StoreProductsService(prisma, storage);
 
 const ownedStore = { id: 'store-techzone', ownerUserId: 'owner-1' };
 

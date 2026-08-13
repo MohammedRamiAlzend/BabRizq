@@ -199,6 +199,23 @@ export class OffersService {
     return this.toView(updated);
   }
 
+  /** PATCH /store/offers/:id/toggle — flip `isActive` without touching other fields. */
+  async toggle(
+    ownerUserId: string,
+    storeId: string | undefined,
+    offerId: string,
+    isActive: boolean,
+  ): Promise<OfferView> {
+    const store = await resolveOwnedStore(this.prisma, ownerUserId, storeId);
+    await this.assertOfferBelongsToStore(store.id, offerId);
+    const updated = await this.prisma.offer.update({
+      where: { id: offerId },
+      data: { status: isActive ? 'active' : 'paused' },
+      include: { product: { select: { nameEn: true, nameAr: true } } },
+    });
+    return this.toView(updated);
+  }
+
   /** GET /store/offers/:id/stats — redemption analytics from applied orders. */
   async getStats(
     ownerUserId: string,

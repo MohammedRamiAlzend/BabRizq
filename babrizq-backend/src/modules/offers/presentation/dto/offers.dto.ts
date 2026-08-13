@@ -126,3 +126,9 @@ export class SetOfferStatusParamsDto {
   @IsNotEmpty()
   id!: string;
 }
+
+export class ToggleOfferDto {
+  @ApiProperty({ example: true })
+  @IsNotEmpty()
+  isActive!: boolean;
+}
